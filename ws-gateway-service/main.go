@@ -163,17 +163,17 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 		responseData, err := processWebAttackDetection(req)
 		if err != nil {
 			log.Printf("Error processing web attack detection: %v", err)
+			score = "0"
+		} else {
+			var response map[string]interface{}
+			err = json.Unmarshal([]byte(responseData), &response)
+			if err != nil {
+				log.Printf("Failed to parse response data: %v", err)
+				return
+			}
+			threatMetrix := response["threat_metrix"].(map[string]interface{})
+			score = fmt.Sprintf("%f", threatMetrix["score"])
 		}
-
-		var response map[string]interface{}
-		err = json.Unmarshal([]byte(responseData), &response)
-		if err != nil {
-			log.Printf("Failed to parse response data: %v", err)
-			return
-		}
-		threatMetrix := response["threat_metrix"].(map[string]interface{})
-		score = fmt.Sprintf("%f", threatMetrix["score"])
-
 	}
 
 	if req.Rule.DGADetection.Enable == "true" {
@@ -223,7 +223,6 @@ func processWebAttackDetection(req RequestBody) (string, error) {
 	requestBody := map[string]string{
 		"payload": concatenatedData,
 	}
-	log.Printf("Request body for Web Attack Detection: %v", requestBody)
 
 	jsonData, err := json.Marshal(requestBody)
 	if err != nil {
