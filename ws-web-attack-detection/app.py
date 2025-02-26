@@ -73,7 +73,7 @@ def get_decoded_auth(authorization: str) -> str:
     except Exception:
         raise HTTPException(status_code=401, detail={"status": "error", "message": "Unauthorized", "error_code": 401})
 
-@app.get("/ping")
+@app.get("/api/v1/ws/service/web-attack-detection/ping")
 def ping_info(authorization: str = Header(None)):
     decoded_auth = get_decoded_auth(authorization)
     if decoded_auth != f"ws:{AUTH_KEY}":
