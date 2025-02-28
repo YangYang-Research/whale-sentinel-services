@@ -112,12 +112,14 @@ async def detection(payload: Payload, authorization: str = Header(None)):
     return JSONResponse(content={
         "status": "success",
         "message": "Request processed successfully",
-        "threat_metrix": {
-            "origin_payload": payload,
-            "decode_payload": decode_payload,
-            "score": accuracy,
+        "data": {
+            "threat_metrix": {
+                "origin_payload": payload,
+                "decode_payload": decode_payload,
+                "score": accuracy,
+            }
         },
-        "processed_at": datetime.now().astimezone().isoformat(),
+        "processed_at": datetime.now().astimezone().isoformat()
     })
 
 if __name__ == "__main__":
