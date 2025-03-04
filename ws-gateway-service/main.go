@@ -349,7 +349,7 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 }
 
 func main() {
-	http.Handle("/api/v1/ws/service/gateway", apiKeyAuthMiddleware(http.HandlerFunc(handleGateway)))
+	http.Handle("/api/v1/ws/services/gateway", apiKeyAuthMiddleware(http.HandlerFunc(handleGateway)))
 	log.Println("WS Gateway Service is running on port 5000...")
 	log.Fatal(http.ListenAndServe(":5000", nil))
 }
