@@ -12,17 +12,18 @@
 
 ## Reporting a Vulnerability
 
-We take the security of our systems and services seriously. If you discover a vulnerability, please report it to us as soon as possible.
+We take the security of our systems and services seriously. If you discover a vulnerability, please report it to us as soon as possible using GitHub's **Report a Vulnerability** feature.
 
 ### How to Report
-- **Email**: Send details of the vulnerability to [ltp.noobpk@gmail.com](mailto:ltp.noobpk@gmail.com).
-- **Subject Line**: Use the format: `[Vulnerability Report] Whale Sentinel - <Service Name> - <Brief Description>`.
-- **Details to Include**:
-  - Description of the vulnerability.
-  - Steps to reproduce the issue.
-  - Potential impact of the vulnerability.
-  - Any proof-of-concept or screenshots (if applicable).
-  - Your contact information (optional).
+1. Go to the **Security** tab of this repository.
+2. Click on **Report a Vulnerability**.
+3. Fill out the vulnerability report form with the following details:
+   - Title: Use the format: `[Vulnerability Report] Whale Sentinel - <Service Name> - <Brief Description>`. 
+   - Description of the vulnerability.
+   - Steps to reproduce the issue.
+   - Potential impact of the vulnerability.
+   - Any proof-of-concept or screenshots (if applicable).
+   - Your contact information (optional).
 
 ### What to Expect
 - **Acknowledgement**: You will receive an acknowledgment of your report within **1 business day**.
@@ -64,4 +65,4 @@ To help us maintain a secure environment, we encourage the following:
 
 ## Contact Us
 
-For any security-related questions or concerns, please contact our security team at [ltp.noobpk@gmail.com](mailto:ltp.noobpk@gmail.com).
+For any security-related questions or concerns, please contact our security team at [t.me/noobpk](t.me/noobpk).
