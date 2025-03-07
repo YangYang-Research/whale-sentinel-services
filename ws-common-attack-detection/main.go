@@ -434,7 +434,6 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 
 	var sqlInjectionFound bool
 	if req.Rule.DetectSqlInjection == "true" {
-		log.Println("Processing SQL injection detection...")
 		payload := req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
 		decodedPayload, err := wsHandleDecoder(payload)
 		if err != nil {
