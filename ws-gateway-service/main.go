@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -20,105 +21,106 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// Load environment variables
 func init() {
-	err := godotenv.Load()
-	if err != nil {
-		fmt.Printf("Error loading .env file: %v\n", err)
+	if err := godotenv.Load(); err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
 	}
 }
 
-// RequestBody defines the structure of the request payload
-type RequestBody struct {
-	AgentID   string  `json:"agent_id"`
-	Rule      Rule    `json:"rule"`
-	Payload   Payload `json:"payload"`
-	Timestamp string  `json:"timestamp"`
-}
+// Structs for request and response
+type (
+	RequestBody struct {
+		AgentID   string  `json:"agent_id"`
+		Rule      Rule    `json:"rule"`
+		Payload   Payload `json:"payload"`
+		Timestamp string  `json:"timestamp"`
+	}
 
-// Rule defines the structure of the rule field in the request body
-type Rule struct {
-	WebAttackDetection    WebAttackDetectionRule    `json:"ws_module_web_attack_detection"`
-	DGADetection          DGADetectionRule          `json:"ws_module_dga_detection"`
-	CommonAttackDetection CommonAttackDetectionRule `json:"ws_module_common_attack_detection"`
-}
+	Rule struct {
+		WebAttackDetection    WebAttackDetectionRule    `json:"ws_module_web_attack_detection"`
+		DGADetection          DGADetectionRule          `json:"ws_module_dga_detection"`
+		CommonAttackDetection CommonAttackDetectionRule `json:"ws_module_common_attack_detection"`
+	}
 
-// WebAttackDetectionRule defines the structure of the web attack detection rule
-type WebAttackDetectionRule struct {
-	Enable       string `json:"enable"`
-	DetectHeader string `json:"detect_header"`
-}
+	WebAttackDetectionRule struct {
+		Enable       string `json:"enable"`
+		DetectHeader string `json:"detect_header"`
+	}
 
-// DGADetectionRule defines the structure of the DGA detection rule
-type DGADetectionRule struct {
-	Enable string `json:"enable"`
-}
+	DGADetectionRule struct {
+		Enable string `json:"enable"`
+	}
 
-// CommonAttackDetectionRule defines the structure of the common attack detection rule
-type CommonAttackDetectionRule struct {
-	Enable                    string `json:"enable"`
-	DetectUnvalidatedRedirect string `json:"detect_unvalidated_redirect"`
-}
+	CommonAttackDetectionRule struct {
+		Enable                   string `json:"enable"`
+		DetectCrossSiteScripting string `json:"detect_cross_site_scripting"`
+		DetectLargeRequest       string `json:"detect_large_request"`
+		DetectSqlInjection       string `json:"detect_sql_injection"`
+		DetectHTTPVerbTampering  string `json:"detect_http_verb_tampering"`
+		DetectHTTPLargeRequest   string `json:"detect_http_large_request"`
+	}
 
-// Payload defines the structure of the payload field in the request body
-type Payload struct {
-	Data Data `json:"data"`
-}
+	Payload struct {
+		Data Data `json:"data"`
+	}
 
-// Data defines the structure of the data field in the payload
-type Data struct {
-	ClientInformation ClientInformation `json:"client_information"`
-	HTTPRequest       HTTPRequest       `json:"http_request"`
-}
+	Data struct {
+		ClientInformation ClientInformation `json:"client_information"`
+		HTTPRequest       HTTPRequest       `json:"http_request"`
+	}
 
-// ClientInformation defines the structure of the client information field in the data
-type ClientInformation struct {
-	IP          string      `json:"ip"`
-	DeviceType  string      `json:"device_type"`
-	NetworkType string      `json:"network_type"`
-	Geolocation Geolocation `json:"geolocation"`
-}
+	ClientInformation struct {
+		IP          string      `json:"ip"`
+		DeviceType  string      `json:"device_type"`
+		NetworkType string      `json:"network_type"`
+		Geolocation Geolocation `json:"geolocation"`
+	}
 
-// Geolocation defines the structure of the geolocation field in the client information
-type Geolocation struct {
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
-	Country   string  `json:"country"`
-	City      string  `json:"city"`
-}
+	Geolocation struct {
+		Latitude  float64 `json:"latitude"`
+		Longitude float64 `json:"longitude"`
+		Country   string  `json:"country"`
+		City      string  `json:"city"`
+	}
 
-// HTTPRequest defines the structure of the HTTP request field in the data
-type HTTPRequest struct {
-	Method      string            `json:"method"`
-	URL         string            `json:"url"`
-	Host        string            `json:"host"`
-	Headers     map[string]string `json:"headers"`
-	QueryParams string            `json:"query_parameters"`
-	Body        string            `json:"body"`
-}
+	HTTPRequest struct {
+		Method      string            `json:"method"`
+		URL         string            `json:"url"`
+		Host        string            `json:"host"`
+		Headers     HTTPRequestHeader `json:"headers"`
+		QueryParams string            `json:"query_parameters"`
+		Body        string            `json:"body"`
+	}
 
-// ResponseBody defines the structure of the response payload
-type ResponseBody struct {
-	Status      string       `json:"status"`
-	Message     string       `json:"message"`
-	Data        ResponseData `json:"data"`
-	ProcessedAt string       `json:"processed_at"`
-}
+	HTTPRequestHeader struct {
+		UserAgent     string `json:"user-agent"`
+		ContentType   string `json:"content-type"`
+		ContentLength int    `json:"content-length"`
+	}
 
-type ResponseData struct {
-	WebAttackDetectionScore string          `json:"ws_module_web_attack_detection_score"`
-	DGADetectionScore       int             `json:"ws_module_dga_detection_score"`
-	CommonAttackDetection   map[string]bool `json:"ws_module_common_attack_detection"`
-	Hash                    string          `json:"hash"`
-}
+	ResponseBody struct {
+		Status      string       `json:"status"`
+		Message     string       `json:"message"`
+		Data        ResponseData `json:"data"`
+		ProcessedAt string       `json:"processed_at"`
+	}
 
-// ErrorResponse defines the structure of the error response payload
-type ErrorResponse struct {
-	Status    string `json:"status"`
-	Message   string `json:"message"`
-	ErrorCode int    `json:"error_code"`
-}
+	ResponseData struct {
+		WebAttackDetectionScore float64         `json:"ws_module_web_attack_detection_score"`
+		DGADetectionScore       float64         `json:"ws_module_dga_detection_score"`
+		CommonAttackDetection   map[string]bool `json:"ws_module_common_attack_detection"`
+		Hash                    string          `json:"hash"`
+	}
 
-// handleGateway processes incoming requests and routes them to the correct module
+	ErrorResponse struct {
+		Status    string `json:"status"`
+		Message   string `json:"message"`
+		ErrorCode int    `json:"error_code"`
+	}
+)
+
+// handleGateway processes incoming requests
 func handleGateway(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		sendErrorResponse(w, "Invalid request method", http.StatusMethodNotAllowed)
@@ -126,65 +128,61 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req RequestBody
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		sendErrorResponse(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
-	// Validate required fields
-	if req.AgentID == "" || req.Payload.Data.ClientInformation.IP == "" || req.Payload.Data.ClientInformation.DeviceType == "" || req.Payload.Data.ClientInformation.NetworkType == "" || req.Payload.Data.HTTPRequest.Method == "" || req.Payload.Data.HTTPRequest.URL == "" || req.Payload.Data.HTTPRequest.Headers == nil || req.Timestamp == "" {
-		sendErrorResponse(w, "Missing required fields", http.StatusBadRequest)
+	if err := validateRequest(req); err != nil {
+		sendErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Validate AgentID format
-	matched, err := regexp.MatchString(`^ws_agent_.*`, req.AgentID)
-	if err != nil || !matched {
-		sendErrorResponse(w, "Invalid AgentID format", http.StatusBadRequest)
-		return
-	}
+	hashString := calculateHash(req)
 
-	// Validate timestamp
-	_, err = time.Parse(time.RFC3339, req.Timestamp)
-	if err != nil {
-		sendErrorResponse(w, "Invalid timestamp format", http.StatusBadRequest)
-		return
-	}
+	var (
+		score                                           float64
+		crossSiteScriptingDetection                     bool
+		sqlInjectionDetection                           bool
+		httpVerbTamperingDetection                      bool
+		httpLargeRequestDetection                       bool
+		wg                                              sync.WaitGroup
+		webAttackDetectionErr, commonAttackDetectionErr error
+	)
 
-	// Calculate hash
-	hashInput := req.Payload.Data.ClientInformation.IP + req.Payload.Data.ClientInformation.DeviceType + req.Timestamp + req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
-	hash := sha256.Sum256([]byte(hashInput))
-	hashString := hex.EncodeToString(hash[:])
-
-	// Process the rules
-	var score string
-	if req.Rule.WebAttackDetection.Enable == "true" {
-		responseData, err := processWebAttackDetection(req)
-		if err != nil {
-			log.Printf("Error processing web attack detection: %v", err)
-			score = "0"
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		if req.Rule.WebAttackDetection.Enable == "true" {
+			score, webAttackDetectionErr = processWebAttackDetection(req)
 		} else {
-			var response map[string]interface{}
-			err = json.Unmarshal([]byte(responseData), &response)
-			if err != nil {
-				log.Printf("Failed to parse response data: %v", err)
-				return
-			}
-			threatMetrix := response["threat_metrix"].(map[string]interface{})
-			score = fmt.Sprintf("%f", threatMetrix["score"])
+			score = 0
 		}
-	}
+	}()
 
-	if req.Rule.DGADetection.Enable == "true" {
-		processDGADetection(req)
+	go func() {
+		defer wg.Done()
+		if req.Rule.CommonAttackDetection.Enable == "true" {
+			crossSiteScriptingDetection, sqlInjectionDetection, httpVerbTamperingDetection, httpLargeRequestDetection, commonAttackDetectionErr = processCommonAttackDetection(req, hashString)
+		}
+	}()
+
+	wg.Wait()
+
+	if webAttackDetectionErr != nil || commonAttackDetectionErr != nil {
+		log.Printf("Errors: Web Attack Detection: %v, Common Attack Detection: %v", webAttackDetectionErr, commonAttackDetectionErr)
 	}
 
 	data := ResponseData{
 		WebAttackDetectionScore: score,
 		DGADetectionScore:       0,
-		CommonAttackDetection:   map[string]bool{"open_redirect": true, "large_request": false, "http_method_tampering": false, "sql_injection": false, "cross_site_scripting": false},
-		Hash:                    hashString,
+		CommonAttackDetection: map[string]bool{
+			"cross_site_scripting_detection": crossSiteScriptingDetection,
+			"sql_injection_detection":        sqlInjectionDetection,
+			"http_verb_tampering_detection":  httpVerbTamperingDetection,
+			"http_large_request_detection":   httpLargeRequestDetection,
+		},
+		Hash: hashString,
 	}
 
 	response := ResponseBody{
@@ -198,78 +196,186 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// processWebAttackDetection handles requests for Web Attack Detection module
-func processWebAttackDetection(req RequestBody) (string, error) {
+// Helper functions
+func validateRequest(req RequestBody) error {
+	if req.Payload.Data.ClientInformation.IP == "" || req.Payload.Data.ClientInformation.DeviceType == "" || req.Payload.Data.ClientInformation.NetworkType == "" || req.Payload.Data.HTTPRequest.Method == "" || req.Payload.Data.HTTPRequest.URL == "" || req.Payload.Data.HTTPRequest.Headers.UserAgent == "" || req.Payload.Data.HTTPRequest.Headers.ContentType == "" || req.Timestamp == "" {
+		return fmt.Errorf("missing required fields")
+	}
+
+	if matched, _ := regexp.MatchString(`^ws_agent_.*`, req.AgentID); !matched {
+		return fmt.Errorf("invalid AgentID format")
+	}
+
+	if _, err := time.Parse(time.RFC3339, req.Timestamp); err != nil {
+		return fmt.Errorf("invalid timestamp format")
+	}
+
+	return nil
+}
+
+func calculateHash(req RequestBody) string {
+	hashInput := req.Payload.Data.ClientInformation.IP + req.Payload.Data.ClientInformation.DeviceType + req.Timestamp + req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
+	hash := sha256.Sum256([]byte(hashInput))
+	return hex.EncodeToString(hash[:])
+}
+
+func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
+	jsonData, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request body: %v", err)
+	}
+
+	apiKey, err := getAPIKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get API key: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", url+endpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	auth := "ws:" + apiKey
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call endpoint: %v", err)
+	}
+	defer resp.Body.Close()
+
+	return io.ReadAll(resp.Body)
+}
+
+// Module processing functions
+func processWebAttackDetection(req RequestBody) (float64, error) {
 	log.Printf("Processing Web Attack Detection for Agent ID: %s", req.AgentID)
+
 	httpRequest := req.Payload.Data.HTTPRequest
 	var concatenatedData string
 	if req.Rule.WebAttackDetection.DetectHeader == "true" {
-		concatenatedData = fmt.Sprintf("%s %s \n Host: %s \n User-Agent: %s \n Content-Type: %s \n Content-Length: %s \n\n %s%s",
-			httpRequest.Method,
-			httpRequest.URL,
-			httpRequest.Host,
-			httpRequest.Headers["User-Agent"],
-			httpRequest.Headers["Content-Type"],
-			httpRequest.Headers["Content-Length"],
-			httpRequest.QueryParams,
-			httpRequest.Body)
-
+		concatenatedData = fmt.Sprintf("%s %s \n Host: %s \n User-Agent: %s \n Content-Type: %s \n Content-Length: %d \n\n %s%s",
+			httpRequest.Method, httpRequest.URL, httpRequest.Host, httpRequest.Headers.UserAgent, httpRequest.Headers.ContentType, httpRequest.Headers.ContentLength, httpRequest.QueryParams, httpRequest.Body)
 	} else {
 		concatenatedData = fmt.Sprintf("%s %s",
 			httpRequest.QueryParams,
 			httpRequest.Body)
 	}
 
-	requestBody := map[string]string{
-		"payload": concatenatedData,
-	}
-
-	jsonData, err := json.Marshal(requestBody)
+	responseData, err := makeHTTPRequest(os.Getenv("WS_MODULE_WEB_ATTACK_DETECTION_URL"), os.Getenv("WS_MODULE_WEB_ATTACK_DETECTION_ENDPOINT"), map[string]string{"payload": concatenatedData})
 	if err != nil {
-		log.Printf("Failed to marshal request body: %v", err)
+		return 0, err
 	}
 
-	webAttackURL := os.Getenv("WS_MODULE_WEB_ATTACK_DETECTION_URL")
-	webAttackEndpoint := os.Getenv("WS_MODULE_WEB_ATTACK_DETECTION_ENDPOINT")
-	fullURL := fmt.Sprintf("%s%s", webAttackURL, webAttackEndpoint)
-
-	apiKey, err := getAPIKey()
-	if err != nil {
-		log.Printf("Failed to get API key: %v", err)
-		return "", err
+	var response map[string]interface{}
+	if err := json.Unmarshal(responseData, &response); err != nil {
+		return 0, fmt.Errorf("failed to parse response data: %v", err)
 	}
 
-	client := &http.Client{}
-	webAttackReq, err := http.NewRequest("POST", fullURL, bytes.NewBuffer(jsonData))
-	if err != nil {
-		log.Printf("Failed to create request: %v", err)
-		return "", err
+	//Debug: Log the response JSON
+	// log.Printf("Response JSON: %+v", response)
+
+	// Check if the "data" key exists and is not nil
+	dataValue, ok := response["data"]
+	if !ok || dataValue == nil {
+		return 0, fmt.Errorf("key 'data' is missing or nil in the response")
 	}
 
-	webAttackReq.Header.Set("Content-Type", "application/json")
-	auth := "ws:" + apiKey
-	webAttackReq.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
-
-	resp, err := client.Do(webAttackReq)
-	if err != nil {
-		log.Printf("Failed to call Web Attack Detection module: %v", err)
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Failed to read response body: %v", err)
-		return "", err
+	// Perform type assertion for the "data" key
+	data, ok := dataValue.(map[string]interface{})
+	if !ok {
+		return 0, fmt.Errorf("invalid type for 'data': expected map[string]interface{}")
 	}
 
-	log.Printf("Web Attack Detection module responded with status: %d", resp.StatusCode)
-	return string(body), nil
+	// Check if the "threat_metrix" key exists and is not nil
+	threatMetrixValue, ok := data["threat_metrix"]
+	if !ok || threatMetrixValue == nil {
+		return 0, fmt.Errorf("key 'threat_metrix' is missing or nil in the response")
+	}
+
+	// Perform type assertion for the "threat_metrix" key
+	threatMetrix, ok := threatMetrixValue.(map[string]interface{})
+	if !ok {
+		return 0, fmt.Errorf("invalid type for 'threat_metrix': expected map[string]interface{}")
+	}
+
+	// Check if the "score" key exists and is not nil
+	scoreValue, ok := threatMetrix["score"]
+	if !ok || scoreValue == nil {
+		return 0, fmt.Errorf("key 'score' is missing or nil in the response")
+	}
+
+	// Perform type assertion for the "score" key
+	score, ok := scoreValue.(float64)
+	if !ok {
+		return 0, fmt.Errorf("invalid type for 'score': expected float64, got %T", scoreValue)
+	}
+
+	return score, nil
 }
 
-// processDGADetection handles requests for DGA Detection module
-func processDGADetection(req RequestBody) {
-	log.Printf("Processing DGA Detection for Agent ID: %s", req.AgentID)
+func processCommonAttackDetection(req RequestBody, hashString string) (bool, bool, bool, bool, error) {
+	log.Printf("Processing Common Attack Detection for Agent ID: %s", req.AgentID)
+
+	requestBody := map[string]interface{}{
+		"hash": hashString,
+		"rule": map[string]string{
+			"detect_cross_site_scripting": req.Rule.CommonAttackDetection.DetectCrossSiteScripting,
+			"detect_large_request":        req.Rule.CommonAttackDetection.DetectLargeRequest,
+			"detect_sql_injection":        req.Rule.CommonAttackDetection.DetectSqlInjection,
+			"detect_http_verb_tampering":  req.Rule.CommonAttackDetection.DetectHTTPVerbTampering,
+			"detect_http_large_request":   req.Rule.CommonAttackDetection.DetectHTTPLargeRequest,
+		},
+		"payload": map[string]interface{}{
+			"data": map[string]interface{}{
+				"client_information": map[string]interface{}{
+					"ip":           req.Payload.Data.ClientInformation.IP,
+					"device_type":  req.Payload.Data.ClientInformation.DeviceType,
+					"network_type": req.Payload.Data.ClientInformation.NetworkType,
+					"geolocation": map[string]interface{}{
+						"latitude":  req.Payload.Data.ClientInformation.Geolocation.Latitude,
+						"longitude": req.Payload.Data.ClientInformation.Geolocation.Longitude,
+						"country":   req.Payload.Data.ClientInformation.Geolocation.Country,
+						"city":      req.Payload.Data.ClientInformation.Geolocation.City,
+					},
+				},
+				"http_request": map[string]interface{}{
+					"method": req.Payload.Data.HTTPRequest.Method,
+					"url":    req.Payload.Data.HTTPRequest.URL,
+					"host":   req.Payload.Data.HTTPRequest.Host,
+					"headers": map[string]interface{}{
+						"user-agent":     req.Payload.Data.HTTPRequest.Headers.UserAgent,
+						"content-type":   req.Payload.Data.HTTPRequest.Headers.ContentType,
+						"content-length": req.Payload.Data.HTTPRequest.Headers.ContentLength,
+					},
+					"query_parameters": req.Payload.Data.HTTPRequest.QueryParams,
+					"body":             req.Payload.Data.HTTPRequest.Body,
+				},
+			},
+		},
+	}
+
+	responseData, err := makeHTTPRequest(os.Getenv("WS_MODULE_COMMON_ATTACK_DETECTION_URL"), os.Getenv("WS_MODULE_COMMON_ATTACK_DETECTION_ENDPOINT"), requestBody)
+	if err != nil {
+		return false, false, false, false, err
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(responseData, &response); err != nil {
+		return false, false, false, false, fmt.Errorf("failed to parse response data: %v", err)
+	}
+
+	data := response["data"].(map[string]interface{})
+	return data["cross_site_scripting_detection"].(bool),
+		data["sql_injection_detection"].(bool),
+		data["http_verb_tampering_detection"].(bool),
+		data["http_large_request_detection"].(bool),
+		nil
 }
 
 // sendErrorResponse sends a JSON error response
@@ -320,13 +426,13 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		apiKey, err := getAPIKey()
 		if err != nil {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			sendErrorResponse(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
 
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			sendErrorResponse(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
@@ -348,6 +454,7 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// Main function
 func main() {
 	http.Handle("/api/v1/ws/services/gateway", apiKeyAuthMiddleware(http.HandlerFunc(handleGateway)))
 	log.Println("WS Gateway Service is running on port 5000...")
