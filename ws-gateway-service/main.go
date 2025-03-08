@@ -31,13 +31,13 @@ func init() {
 // Structs for request and response
 type (
 	RequestBody struct {
-		AgentID   string  `json:"agent_id"`
-		Rule      Rule    `json:"rule"`
-		Payload   Payload `json:"payload"`
-		Timestamp string  `json:"timestamp"`
+		AgentID          string  `json:"agent_id"`
+		Rules            Rules   `json:"rules"`
+		Payload          Payload `json:"payload"`
+		RequestCreatedAt string  `json:"request_created_at"`
 	}
 
-	Rule struct {
+	Rules struct {
 		WebAttackDetection    WebAttackDetectionRule    `json:"ws_module_web_attack_detection"`
 		DGADetection          DGADetectionRule          `json:"ws_module_dga_detection"`
 		CommonAttackDetection CommonAttackDetectionRule `json:"ws_module_common_attack_detection"`
@@ -97,13 +97,15 @@ type (
 		UserAgent     string `json:"user-agent"`
 		ContentType   string `json:"content-type"`
 		ContentLength int    `json:"content-length"`
+		Referer       string `json:"referer"`
 	}
 
 	ResponseBody struct {
-		Status      string       `json:"status"`
-		Message     string       `json:"message"`
-		Data        ResponseData `json:"data"`
-		ProcessedAt string       `json:"processed_at"`
+		Status             string       `json:"status"`
+		Message            string       `json:"message"`
+		Data               ResponseData `json:"data"`
+		RequestCreatedAt   string       `json:"request_created_at"`
+		RequestProcessedAt string       `json:"request_processed_at"`
 	}
 
 	ResponseData struct {
@@ -153,7 +155,7 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		if req.Rule.WebAttackDetection.Enable == "true" {
+		if req.Rules.WebAttackDetection.Enable == "true" {
 			score, webAttackDetectionErr = processWebAttackDetection(req)
 		} else {
 			score = 0
@@ -162,7 +164,7 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		defer wg.Done()
-		if req.Rule.CommonAttackDetection.Enable == "true" {
+		if req.Rules.CommonAttackDetection.Enable == "true" {
 			crossSiteScriptingDetection, sqlInjectionDetection, httpVerbTamperingDetection, httpLargeRequestDetection, commonAttackDetectionErr = processCommonAttackDetection(req, hashString)
 		}
 	}()
@@ -186,10 +188,11 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := ResponseBody{
-		Status:      "success",
-		Message:     "Request processed successfully",
-		Data:        data,
-		ProcessedAt: time.Now().Format(time.RFC3339),
+		Status:             "success",
+		Message:            "Request processed successfully",
+		Data:               data,
+		RequestCreatedAt:   req.RequestCreatedAt,
+		RequestProcessedAt: time.Now().Format(time.RFC3339),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -198,7 +201,7 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 
 // Helper functions
 func validateRequest(req RequestBody) error {
-	if req.Payload.Data.ClientInformation.IP == "" || req.Payload.Data.ClientInformation.DeviceType == "" || req.Payload.Data.ClientInformation.NetworkType == "" || req.Payload.Data.HTTPRequest.Method == "" || req.Payload.Data.HTTPRequest.URL == "" || req.Payload.Data.HTTPRequest.Headers.UserAgent == "" || req.Payload.Data.HTTPRequest.Headers.ContentType == "" || req.Timestamp == "" {
+	if req.Payload.Data.ClientInformation.IP == "" || req.Payload.Data.ClientInformation.DeviceType == "" || req.Payload.Data.ClientInformation.NetworkType == "" || req.Payload.Data.HTTPRequest.Method == "" || req.Payload.Data.HTTPRequest.URL == "" || req.Payload.Data.HTTPRequest.Headers.UserAgent == "" || req.Payload.Data.HTTPRequest.Headers.ContentType == "" {
 		return fmt.Errorf("missing required fields")
 	}
 
@@ -206,15 +209,14 @@ func validateRequest(req RequestBody) error {
 		return fmt.Errorf("invalid AgentID format")
 	}
 
-	if _, err := time.Parse(time.RFC3339, req.Timestamp); err != nil {
+	if _, err := time.Parse(time.RFC3339, req.RequestCreatedAt); err != nil {
 		return fmt.Errorf("invalid timestamp format")
 	}
-
 	return nil
 }
 
 func calculateHash(req RequestBody) string {
-	hashInput := req.Payload.Data.ClientInformation.IP + req.Payload.Data.ClientInformation.DeviceType + req.Timestamp + req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
+	hashInput := req.Payload.Data.ClientInformation.IP + req.Payload.Data.ClientInformation.DeviceType + req.Payload.Data.HTTPRequest.Method + req.Payload.Data.HTTPRequest.Host + req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
 	hash := sha256.Sum256([]byte(hashInput))
 	return hex.EncodeToString(hash[:])
 }
@@ -258,7 +260,7 @@ func processWebAttackDetection(req RequestBody) (float64, error) {
 
 	httpRequest := req.Payload.Data.HTTPRequest
 	var concatenatedData string
-	if req.Rule.WebAttackDetection.DetectHeader == "true" {
+	if req.Rules.WebAttackDetection.DetectHeader == "true" {
 		concatenatedData = fmt.Sprintf("%s %s \n Host: %s \n User-Agent: %s \n Content-Type: %s \n Content-Length: %d \n\n %s%s",
 			httpRequest.Method, httpRequest.URL, httpRequest.Host, httpRequest.Headers.UserAgent, httpRequest.Headers.ContentType, httpRequest.Headers.ContentLength, httpRequest.QueryParams, httpRequest.Body)
 	} else {
@@ -324,12 +326,12 @@ func processCommonAttackDetection(req RequestBody, hashString string) (bool, boo
 
 	requestBody := map[string]interface{}{
 		"hash": hashString,
-		"rule": map[string]string{
-			"detect_cross_site_scripting": req.Rule.CommonAttackDetection.DetectCrossSiteScripting,
-			"detect_large_request":        req.Rule.CommonAttackDetection.DetectLargeRequest,
-			"detect_sql_injection":        req.Rule.CommonAttackDetection.DetectSqlInjection,
-			"detect_http_verb_tampering":  req.Rule.CommonAttackDetection.DetectHTTPVerbTampering,
-			"detect_http_large_request":   req.Rule.CommonAttackDetection.DetectHTTPLargeRequest,
+		"rules": map[string]string{
+			"detect_cross_site_scripting": req.Rules.CommonAttackDetection.DetectCrossSiteScripting,
+			"detect_large_request":        req.Rules.CommonAttackDetection.DetectLargeRequest,
+			"detect_sql_injection":        req.Rules.CommonAttackDetection.DetectSqlInjection,
+			"detect_http_verb_tampering":  req.Rules.CommonAttackDetection.DetectHTTPVerbTampering,
+			"detect_http_large_request":   req.Rules.CommonAttackDetection.DetectHTTPLargeRequest,
 		},
 		"payload": map[string]interface{}{
 			"data": map[string]interface{}{
@@ -352,6 +354,7 @@ func processCommonAttackDetection(req RequestBody, hashString string) (bool, boo
 						"user-agent":     req.Payload.Data.HTTPRequest.Headers.UserAgent,
 						"content-type":   req.Payload.Data.HTTPRequest.Headers.ContentType,
 						"content-length": req.Payload.Data.HTTPRequest.Headers.ContentLength,
+						"referer":        req.Payload.Data.HTTPRequest.Headers.Referer,
 					},
 					"query_parameters": req.Payload.Data.HTTPRequest.QueryParams,
 					"body":             req.Payload.Data.HTTPRequest.Body,
@@ -456,7 +459,11 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 
 // Main function
 func main() {
-	http.Handle("/api/v1/ws/services/gateway", apiKeyAuthMiddleware(http.HandlerFunc(handleGateway)))
+	// Wrap the handler with a 30-second timeout
+	timeoutHandler := http.TimeoutHandler(apiKeyAuthMiddleware(http.HandlerFunc(handleGateway)), 30*time.Second, "Request timed out")
+
+	// Register the timeout handler
+	http.Handle("/api/v1/ws/services/gateway", timeoutHandler)
 	log.Println("WS Gateway Service is running on port 5000...")
 	log.Fatal(http.ListenAndServe(":5000", nil))
 }
