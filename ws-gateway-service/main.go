@@ -143,22 +143,23 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 	hashString := calculateHash(req)
 
 	var (
-		score                                           float64
-		crossSiteScriptingDetection                     bool
-		sqlInjectionDetection                           bool
-		httpVerbTamperingDetection                      bool
-		httpLargeRequestDetection                       bool
-		wg                                              sync.WaitGroup
-		webAttackDetectionErr, commonAttackDetectionErr error
+		webAttackDetectionScore                                          float64
+		DGADetectionScore                                                float64
+		crossSiteScriptingDetection                                      bool
+		sqlInjectionDetection                                            bool
+		httpVerbTamperingDetection                                       bool
+		httpLargeRequestDetection                                        bool
+		wg                                                               sync.WaitGroup
+		webAttackDetectionErr, commonAttackDetectionErr, dgaDetectionErr error
 	)
 
-	wg.Add(2)
+	wg.Add(3)
 	go func() {
 		defer wg.Done()
 		if req.Rules.WebAttackDetection.Enable == "true" {
-			score, webAttackDetectionErr = processWebAttackDetection(req)
+			webAttackDetectionScore, webAttackDetectionErr = processWebAttackDetection(req)
 		} else {
-			score = 0
+			webAttackDetectionScore = 0
 		}
 	}()
 
@@ -169,15 +170,24 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	go func() {
+		defer wg.Done()
+		if req.Rules.DGADetection.Enable == "true" {
+			DGADetectionScore, dgaDetectionErr = processDGADetection(req)
+		} else {
+			DGADetectionScore = 0
+		}
+	}()
+
 	wg.Wait()
 
-	if webAttackDetectionErr != nil || commonAttackDetectionErr != nil {
-		log.Printf("Errors: Web Attack Detection: %v, Common Attack Detection: %v", webAttackDetectionErr, commonAttackDetectionErr)
+	if webAttackDetectionErr != nil || commonAttackDetectionErr != nil || dgaDetectionErr != nil {
+		log.Printf("Errors: Web Attack Detection: %v, Common Attack Detection: %v, DGA Detection %v", webAttackDetectionErr, commonAttackDetectionErr, dgaDetectionErr)
 	}
 
 	data := ResponseData{
-		WebAttackDetectionScore: score,
-		DGADetectionScore:       0,
+		WebAttackDetectionScore: webAttackDetectionScore,
+		DGADetectionScore:       DGADetectionScore,
 		CommonAttackDetection: map[string]bool{
 			"cross_site_scripting_detection": crossSiteScriptingDetection,
 			"sql_injection_detection":        sqlInjectionDetection,
@@ -379,6 +389,29 @@ func processCommonAttackDetection(req RequestBody, hashString string) (bool, boo
 		data["http_verb_tampering_detection"].(bool),
 		data["http_large_request_detection"].(bool),
 		nil
+}
+
+func processDGADetection(req RequestBody) (float64, error) {
+	log.Printf("Processing DGA Detection for Agent ID: %s", req.AgentID)
+
+	httpRequest := req.Payload.Data.HTTPRequest.Headers.Referer
+	log.Printf("Referer: %s", httpRequest)
+
+	responseData, err := makeHTTPRequest(os.Getenv("WS_MODULE_DGA_DETECTION_URL"), os.Getenv("WS_MODULE_DGA_DETECTION_ENDPOINT"), map[string]string{"payload": httpRequest})
+	if err != nil {
+		return 0, err
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(responseData, &response); err != nil {
+		return 0, fmt.Errorf("failed to parse response data: %v", err)
+	}
+
+	//Debug: Log the response JSON
+	log.Printf("Response JSON: %+v", response)
+
+	// Implement DGA detection logic here
+	return 0, nil
 }
 
 // sendErrorResponse sends a JSON error response
