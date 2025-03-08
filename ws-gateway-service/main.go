@@ -104,6 +104,7 @@ type (
 		Status             string       `json:"status"`
 		Message            string       `json:"message"`
 		Data               ResponseData `json:"data"`
+		EventID            string       `json:"event_id"`
 		RequestCreatedAt   string       `json:"request_created_at"`
 		RequestProcessedAt string       `json:"request_processed_at"`
 	}
@@ -112,7 +113,6 @@ type (
 		WebAttackDetectionScore float64         `json:"ws_module_web_attack_detection_score"`
 		DGADetectionScore       float64         `json:"ws_module_dga_detection_score"`
 		CommonAttackDetection   map[string]bool `json:"ws_module_common_attack_detection"`
-		Hash                    string          `json:"hash"`
 	}
 
 	ErrorResponse struct {
@@ -140,7 +140,7 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hashString := calculateHash(req)
+	agentEventID := generateAgentEventID(req)
 
 	var (
 		webAttackDetectionScore                                          float64
@@ -166,7 +166,7 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer wg.Done()
 		if req.Rules.CommonAttackDetection.Enable == "true" {
-			crossSiteScriptingDetection, sqlInjectionDetection, httpVerbTamperingDetection, httpLargeRequestDetection, commonAttackDetectionErr = processCommonAttackDetection(req, hashString)
+			crossSiteScriptingDetection, sqlInjectionDetection, httpVerbTamperingDetection, httpLargeRequestDetection, commonAttackDetectionErr = processCommonAttackDetection(req, agentEventID)
 		}
 	}()
 
@@ -194,13 +194,13 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 			"http_verb_tampering_detection":  httpVerbTamperingDetection,
 			"http_large_request_detection":   httpLargeRequestDetection,
 		},
-		Hash: hashString,
 	}
 
 	response := ResponseBody{
 		Status:             "success",
 		Message:            "Request processed successfully",
 		Data:               data,
+		EventID:            agentEventID,
 		RequestCreatedAt:   req.RequestCreatedAt,
 		RequestProcessedAt: time.Now().Format(time.RFC3339),
 	}
@@ -225,10 +225,11 @@ func validateRequest(req RequestBody) error {
 	return nil
 }
 
-func calculateHash(req RequestBody) string {
+func generateAgentEventID(req RequestBody) string {
 	hashInput := req.Payload.Data.ClientInformation.IP + req.Payload.Data.ClientInformation.DeviceType + req.Payload.Data.HTTPRequest.Method + req.Payload.Data.HTTPRequest.Host + req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
 	hash := sha256.Sum256([]byte(hashInput))
-	return hex.EncodeToString(hash[:])
+	agentEventID := req.AgentID + "|" + hex.EncodeToString(hash[:])
+	return agentEventID
 }
 
 func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
