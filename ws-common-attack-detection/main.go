@@ -28,13 +28,14 @@ func init() {
 
 // RequestBody defines the structure of the request payload
 type RequestBody struct {
-	Hash    string  `json:"hash"`
-	Rule    Rule    `json:"rule"`
-	Payload Payload `json:"payload"`
+	EventID          string  `json:"event_id"`
+	Rules            Rules   `json:"rules"`
+	Payload          Payload `json:"payload"`
+	RequestCreatedAt string  `json:"request_created_at"`
 }
 
 // Rule defines the structure of the rule field in the request body
-type Rule struct {
+type Rules struct {
 	DetectCrossSiteScripting string `json:"detect_cross_site_scripting"`
 	DetectLargeRequest       string `json:"detect_large_request"`
 	DetectSqlInjection       string `json:"detect_sql_injection"`
@@ -84,14 +85,17 @@ type HTTPRequestHeader struct {
 	UserAgent     string `json:"user-agent"`
 	ContentType   string `json:"content-type"`
 	ContentLength int    `json:"content-length"`
+	Referer       string `json:"referer"`
 }
 
 // ResponseBody defines the structure of the response payload
 type ResponseBody struct {
-	Status      string       `json:"status"`
-	Message     string       `json:"message"`
-	Data        ResponseData `json:"data"`
-	ProcessedAt string       `json:"processed_at"`
+	Status             string       `json:"status"`
+	Message            string       `json:"message"`
+	Data               ResponseData `json:"data"`
+	EventID            string       `json:"event_id"`
+	RequestCreatedAt   string       `json:"request_created_at"`
+	RequestProcessedAt string       `json:"request_processed_at"`
 }
 
 type ResponseData struct {
@@ -418,7 +422,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 
 	// Process the rules
 	var xssFound bool
-	if req.Rule.DetectCrossSiteScripting == "true" {
+	if req.Rules.DetectCrossSiteScripting == "true" {
 		payload := req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
 		decodedPayload, err := wsHandleDecoder(payload)
 		if err != nil {
@@ -433,7 +437,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var sqlInjectionFound bool
-	if req.Rule.DetectSqlInjection == "true" {
+	if req.Rules.DetectSqlInjection == "true" {
 		payload := req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
 		decodedPayload, err := wsHandleDecoder(payload)
 		if err != nil {
@@ -448,7 +452,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var httpVerbTamperingFound bool
-	if req.Rule.DetectHTTPVerbTampering == "true" {
+	if req.Rules.DetectHTTPVerbTampering == "true" {
 		httpVerbTamperingFound, err = wsHTTPVerbTamperingDetection(req.Payload.Data.HTTPRequest.Method)
 		if err != nil {
 			sendErrorResponse(w, "Error processing data", http.StatusInternalServerError)
@@ -457,7 +461,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var httpLargeRequestFound bool
-	if req.Rule.DetectHTTPLargeRequest == "true" {
+	if req.Rules.DetectHTTPLargeRequest == "true" {
 		httpLargeRequestFound, err = wsLargeRequestDetection(req.Payload.Data.HTTPRequest.Headers.ContentLength)
 		if err != nil {
 			sendErrorResponse(w, "Error processing data", http.StatusInternalServerError)
@@ -473,10 +477,12 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := ResponseBody{
-		Status:      "success",
-		Message:     "Request processed successfully",
-		Data:        data,
-		ProcessedAt: time.Now().Format(time.RFC3339),
+		Status:             "success",
+		Message:            "Request processed successfully",
+		Data:               data,
+		EventID:            strings.Replace(req.EventID, "WS_GATEWAY_SERVICE", "WS_COMMON_ATTACK_DETECTION", -1),
+		RequestCreatedAt:   req.RequestCreatedAt,
+		RequestProcessedAt: time.Now().Format(time.RFC3339),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -484,7 +490,11 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	http.Handle("/api/v1/ws/services/common-attack-detection", apiKeyAuthMiddleware(http.HandlerFunc(handleData)))
+	// Wrap the handler with a 30-second timeout
+	timeoutHandler := http.TimeoutHandler(http.HandlerFunc(handleData), 30*time.Second, "Request timed out")
+
+	// Register the timeout handler
+	http.Handle("/api/v1/ws/services/common-attack-detection", apiKeyAuthMiddleware(timeoutHandler))
 	log.Println("WS Common Attack Detection is running on port 5003...")
 	log.Fatal(http.ListenAndServe(":5003", nil))
 }
