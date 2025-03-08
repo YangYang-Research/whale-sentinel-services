@@ -17,9 +17,12 @@ from keras.models import load_model
 import uvicorn
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
+import asyncio
 
 class Payload(BaseModel):
     payload: str
+    event_id: str
+    request_created_at: str
 
 load_dotenv()
 
@@ -91,12 +94,20 @@ def ping_info(authorization: str = Header(None)):
 
 @app.post("/api/v1/ws/services/web-attack-detection")
 async def detection(payload: Payload, authorization: str = Header(None)):
+    try:
+        # Enforce a 30-second timeout for the entire function
+        result = await asyncio.wait_for(process_detection(payload, authorization), timeout=30.0)
+        return result
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail={"status": "error", "message": "Request timed out", "error_code": 504})
+    
+async def process_detection(payload: Payload, authorization: str):
     decoded_auth = get_decoded_auth(authorization)
     if decoded_auth != f"ws:{AUTH_KEY}":
         raise HTTPException(status_code=401, detail={"status": "error", "message": "Unauthorized", "error_code": 401})
     
-    payload = payload.payload
-    decode_payload = ws_decoder(payload)
+    payload_data = payload.payload
+    decode_payload = ws_decoder(payload_data)
     embeddings = encoder.encode(decode_payload).reshape((1, 384))
     
     def predict():
@@ -109,17 +120,22 @@ async def detection(payload: Payload, authorization: str = Header(None)):
         prediction = executor.submit(predict).result()
         accuracy = executor.submit(calculate_accuracy, prediction).result()
 
+   # Replace "WS_GATEWAY_SERVICE" with "WS_WEB_ATTACK_DETECTION" in event_id
+    event_id = payload.event_id.replace("WS_GATEWAY_SERVICE", "WS_WEB_ATTACK_DETECTION")
+
     return JSONResponse(content={
         "status": "success",
         "message": "Request processed successfully",
         "data": {
             "threat_metrix": {
-                "origin_payload": payload,
+                "origin_payload": payload_data,
                 "decode_payload": decode_payload,
                 "score": accuracy,
             }
         },
-        "processed_at": datetime.now().astimezone().isoformat()
+        "event_id": event_id,
+        "request_created_at": payload.request_created_at,
+        "request_processed_at": datetime.now().astimezone().isoformat()
     })
 
 if __name__ == "__main__":
