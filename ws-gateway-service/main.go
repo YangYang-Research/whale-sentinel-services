@@ -140,7 +140,7 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agentEventID := generateAgentEventID(req)
+	eventID := generateEventID(req)
 
 	var (
 		webAttackDetectionScore                                          float64
@@ -157,7 +157,7 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer wg.Done()
 		if req.Rules.WebAttackDetection.Enable == "true" {
-			webAttackDetectionScore, webAttackDetectionErr = processWebAttackDetection(req)
+			webAttackDetectionScore, webAttackDetectionErr = processWebAttackDetection(req, eventID)
 		} else {
 			webAttackDetectionScore = 0
 		}
@@ -166,14 +166,14 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer wg.Done()
 		if req.Rules.CommonAttackDetection.Enable == "true" {
-			crossSiteScriptingDetection, sqlInjectionDetection, httpVerbTamperingDetection, httpLargeRequestDetection, commonAttackDetectionErr = processCommonAttackDetection(req, agentEventID)
+			crossSiteScriptingDetection, sqlInjectionDetection, httpVerbTamperingDetection, httpLargeRequestDetection, commonAttackDetectionErr = processCommonAttackDetection(req, eventID)
 		}
 	}()
 
 	go func() {
 		defer wg.Done()
 		if req.Rules.DGADetection.Enable == "true" {
-			DGADetectionScore, dgaDetectionErr = processDGADetection(req)
+			DGADetectionScore, dgaDetectionErr = processDGADetection(req, eventID)
 		} else {
 			DGADetectionScore = 0
 		}
@@ -200,7 +200,7 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 		Status:             "success",
 		Message:            "Request processed successfully",
 		Data:               data,
-		EventID:            agentEventID,
+		EventID:            eventID,
 		RequestCreatedAt:   req.RequestCreatedAt,
 		RequestProcessedAt: time.Now().Format(time.RFC3339),
 	}
@@ -225,11 +225,11 @@ func validateRequest(req RequestBody) error {
 	return nil
 }
 
-func generateAgentEventID(req RequestBody) string {
+func generateEventID(req RequestBody) string {
 	hashInput := req.Payload.Data.ClientInformation.IP + req.Payload.Data.ClientInformation.DeviceType + req.Payload.Data.HTTPRequest.Method + req.Payload.Data.HTTPRequest.Host + req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
 	hash := sha256.Sum256([]byte(hashInput))
-	agentEventID := req.AgentID + "|" + hex.EncodeToString(hash[:])
-	return agentEventID
+	eventID := req.AgentID + "|" + "WS_GATEWAY_SERVICE" + "|" + hex.EncodeToString(hash[:])
+	return eventID
 }
 
 func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
@@ -266,8 +266,8 @@ func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
 }
 
 // Module processing functions
-func processWebAttackDetection(req RequestBody) (float64, error) {
-	log.Printf("Processing Web Attack Detection for Agent ID: %s", req.AgentID)
+func processWebAttackDetection(req RequestBody, eventID string) (float64, error) {
+	log.Printf("Processing Web Attack Detection for Event ID: %s", eventID)
 
 	httpRequest := req.Payload.Data.HTTPRequest
 	var concatenatedData string
@@ -280,7 +280,13 @@ func processWebAttackDetection(req RequestBody) (float64, error) {
 			httpRequest.Body)
 	}
 
-	responseData, err := makeHTTPRequest(os.Getenv("WS_MODULE_WEB_ATTACK_DETECTION_URL"), os.Getenv("WS_MODULE_WEB_ATTACK_DETECTION_ENDPOINT"), map[string]string{"payload": concatenatedData})
+	requestBody := map[string]interface{}{
+		"event_id":           eventID,
+		"payload":            concatenatedData,
+		"request_created_at": time.Now().Format(time.RFC3339),
+	}
+
+	responseData, err := makeHTTPRequest(os.Getenv("WS_MODULE_WEB_ATTACK_DETECTION_URL"), os.Getenv("WS_MODULE_WEB_ATTACK_DETECTION_ENDPOINT"), requestBody)
 	if err != nil {
 		return 0, err
 	}
@@ -292,6 +298,7 @@ func processWebAttackDetection(req RequestBody) (float64, error) {
 
 	//Debug: Log the response JSON
 	// log.Printf("Response JSON: %+v", response)
+	log.Printf("Processed Web Attack Detection for Event ID: %s", response["event_id"])
 
 	// Check if the "data" key exists and is not nil
 	dataValue, ok := response["data"]
@@ -332,11 +339,11 @@ func processWebAttackDetection(req RequestBody) (float64, error) {
 	return score, nil
 }
 
-func processCommonAttackDetection(req RequestBody, hashString string) (bool, bool, bool, bool, error) {
-	log.Printf("Processing Common Attack Detection for Agent ID: %s", req.AgentID)
+func processCommonAttackDetection(req RequestBody, eventID string) (bool, bool, bool, bool, error) {
+	log.Printf("Processing Common Attack Detection for Event ID: %s", eventID)
 
 	requestBody := map[string]interface{}{
-		"hash": hashString,
+		"event_id": eventID,
 		"rules": map[string]string{
 			"detect_cross_site_scripting": req.Rules.CommonAttackDetection.DetectCrossSiteScripting,
 			"detect_large_request":        req.Rules.CommonAttackDetection.DetectLargeRequest,
@@ -372,6 +379,7 @@ func processCommonAttackDetection(req RequestBody, hashString string) (bool, boo
 				},
 			},
 		},
+		"request_created_at": time.Now().Format(time.RFC3339),
 	}
 
 	responseData, err := makeHTTPRequest(os.Getenv("WS_MODULE_COMMON_ATTACK_DETECTION_URL"), os.Getenv("WS_MODULE_COMMON_ATTACK_DETECTION_ENDPOINT"), requestBody)
@@ -384,6 +392,10 @@ func processCommonAttackDetection(req RequestBody, hashString string) (bool, boo
 		return false, false, false, false, fmt.Errorf("failed to parse response data: %v", err)
 	}
 
+	//Debug: Log the response JSON
+	//log.Printf("Response JSON: %+v", response)
+	log.Printf("Processed Common Attack Detection for Event ID: %s", response["event_id"])
+
 	data := response["data"].(map[string]interface{})
 	return data["cross_site_scripting_detection"].(bool),
 		data["sql_injection_detection"].(bool),
@@ -392,13 +404,17 @@ func processCommonAttackDetection(req RequestBody, hashString string) (bool, boo
 		nil
 }
 
-func processDGADetection(req RequestBody) (float64, error) {
-	log.Printf("Processing DGA Detection for Agent ID: %s", req.AgentID)
+func processDGADetection(req RequestBody, eventID string) (float64, error) {
+	log.Printf("Processing DGA Detection for Event ID: %s", eventID)
 
 	httpRequest := req.Payload.Data.HTTPRequest.Headers.Referer
-	log.Printf("Referer: %s", httpRequest)
+	RequestBody := map[string]string{
+		"event_id":           eventID,
+		"payload":            httpRequest,
+		"request_created_at": time.Now().Format(time.RFC3339),
+	}
 
-	responseData, err := makeHTTPRequest(os.Getenv("WS_MODULE_DGA_DETECTION_URL"), os.Getenv("WS_MODULE_DGA_DETECTION_ENDPOINT"), map[string]string{"payload": httpRequest})
+	responseData, err := makeHTTPRequest(os.Getenv("WS_MODULE_DGA_DETECTION_URL"), os.Getenv("WS_MODULE_DGA_DETECTION_ENDPOINT"), RequestBody)
 	if err != nil {
 		return 0, err
 	}
