@@ -1,3 +1,4 @@
+# python 3.9
 import base64
 import html
 import json
@@ -13,7 +14,8 @@ from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
-from keras.models import load_model
+from tensorflow.keras.models import load_model
+from huggingface_hub import hf_hub_download
 import uvicorn
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -39,8 +41,6 @@ if AWS_KMS_ENABLE:
 else:
     AUTH_KEY = os.getenv("API_KEY")
 
-whale_sentinel_model = load_model(os.getenv("WS_MODEL"))
-
 app = FastAPI()
 
 def load_encoder():
@@ -48,6 +48,15 @@ def load_encoder():
     return SentenceTransformer(model_name_or_path)
 
 encoder = load_encoder()
+
+def load_model_detector():
+    local_model_path = hf_hub_download(
+        repo_id="noobpk/web-attack-detection",
+        filename="model.h5"
+    )
+    return load_model(local_model_path)
+    
+model_detector = load_model_detector()
 
 def ws_decoder(_string: str) -> str:
     string = _string.replace(r"\%", "%").replace(r"\\", "").replace(r"<br/>", "")
@@ -82,7 +91,7 @@ def ping_info(authorization: str = Header(None)):
     if decoded_auth != f"ws:{AUTH_KEY}":
         raise HTTPException(status_code=401, detail={"status": "error", "message": "Unauthorized", "error_code": 401})
     return {
-        "model": "Whale-Sentinel-Web-Attack-Detection",
+        "model": "noobpk/web-attack-detection",
         "sample": "592479",
         "max_input_length": "unlimit",
         "vector_size": "384",
@@ -111,7 +120,7 @@ async def process_detection(payload: Payload, authorization: str):
     embeddings = encoder.encode(decode_payload).reshape((1, 384))
     
     def predict():
-        return whale_sentinel_model.predict(embeddings)
+        return model_detector.predict(embeddings)
 
     def calculate_accuracy(prediction):
         return float(prediction[0][0] * 100)
