@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"sync"
@@ -404,13 +405,27 @@ func processCommonAttackDetection(req RequestBody, eventID string) (bool, bool, 
 		nil
 }
 
+func getDomain(fullUrl string) (string, error) {
+	parsedUrl, err := url.Parse(fullUrl)
+	if err != nil {
+		return "", err
+	}
+	return parsedUrl.Host, nil
+}
+
 func processDGADetection(req RequestBody, eventID string) (float64, error) {
 	log.Printf("Processing DGA Detection for Event ID: %s", eventID)
 
-	httpRequest := req.Payload.Data.HTTPRequest.Headers.Referer
+	refererURL := req.Payload.Data.HTTPRequest.Headers.Referer
+
+	domain, err := getDomain(refererURL)
+	if err != nil {
+		return 0, err
+	}
+
 	RequestBody := map[string]string{
 		"event_id":           eventID,
-		"payload":            httpRequest,
+		"payload":            domain,
 		"request_created_at": time.Now().Format(time.RFC3339),
 	}
 
@@ -425,10 +440,46 @@ func processDGADetection(req RequestBody, eventID string) (float64, error) {
 	}
 
 	//Debug: Log the response JSON
-	log.Printf("Response JSON: %+v", response)
+	// log.Printf("Response JSON: %+v", response)
+	log.Printf("Processed DGA Detection for Event ID: %s", response["event_id"])
 
-	// Implement DGA detection logic here
-	return 0, nil
+	// Check if the "data" key exists and is not nil
+	dataValue, ok := response["data"]
+	if !ok || dataValue == nil {
+		return 0, fmt.Errorf("key 'data' is missing or nil in the response")
+	}
+
+	// Perform type assertion for the "data" key
+	data, ok := dataValue.(map[string]interface{})
+	if !ok {
+		return 0, fmt.Errorf("invalid type for 'data': expected map[string]interface{}")
+	}
+
+	// Check if the "threat_metrix" key exists and is not nil
+	threatMetrixValue, ok := data["threat_metrix"]
+	if !ok || threatMetrixValue == nil {
+		return 0, fmt.Errorf("key 'threat_metrix' is missing or nil in the response")
+	}
+
+	// Perform type assertion for the "threat_metrix" key
+	threatMetrix, ok := threatMetrixValue.(map[string]interface{})
+	if !ok {
+		return 0, fmt.Errorf("invalid type for 'threat_metrix': expected map[string]interface{}")
+	}
+
+	// Check if the "score" key exists and is not nil
+	scoreValue, ok := threatMetrix["score"]
+	if !ok || scoreValue == nil {
+		return 0, fmt.Errorf("key 'score' is missing or nil in the response")
+	}
+
+	// Perform type assertion for the "score" key
+	score, ok := scoreValue.(float64)
+	if !ok {
+		return 0, fmt.Errorf("invalid type for 'score': expected float64, got %T", scoreValue)
+	}
+
+	return score, nil
 }
 
 // sendErrorResponse sends a JSON error response
