@@ -15,6 +15,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
 from datetime import datetime
+import json
 
 load_dotenv()
 
@@ -23,20 +24,34 @@ class Payload(BaseModel):
     event_id: str
     request_created_at: str
 
-AWS_KMS_ENABLE = os.getenv("AWS_KMS_ENABLE", "false").lower() == "true"
-
-if AWS_KMS_ENABLE:
-    try:
-        kms_client = boto3.client('kms', region_name=os.getenv("AWS_REGION"))
-        encrypted_api_key = os.getenv("API_KEY")
-        decrypted_api_key = kms_client.decrypt(CiphertextBlob=base64.b64decode(encrypted_api_key))
-        AUTH_KEY = decrypted_api_key['Plaintext'].decode('utf-8')
-    except (BotoCoreError, ClientError) as e:
-        raise Exception(f"Failed to retrieve API key from AWS KMS: {str(e)}")
-else:
-    AUTH_KEY = os.getenv("API_KEY")
+AWS_REGION = os.getenv("AWS_REGION")
+AWS_API_KEY_NAME = os.getenv("AWS_API_KEY_NAME")
 
 app = FastAPI()
+
+def get_secret():
+
+    # Create a Secrets Manager client
+    session = boto3.session.Session()
+    client = session.client(
+        service_name='secretsmanager',
+        region_name=AWS_REGION
+    )
+
+    try:
+        get_secret_value_response = client.get_secret_value(
+            SecretId=AWS_API_KEY_NAME
+        )
+    except ClientError as e:
+        # For a list of exceptions thrown, see
+        # https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_GetSecretValue.html
+        raise e
+
+    secret = get_secret_value_response['SecretString']
+    secret_data = json.loads(secret)
+    api_key = secret_data.get("apiKey")
+
+    return api_key
 
 def load_model_detector():
     local_model_path = hf_hub_download(
@@ -63,7 +78,9 @@ def get_decoded_auth(authorization: str) -> str:
 @app.get("/api/v1/ws/services/dga-detection/ping")
 def ping_info(authorization: str = Header(None)):
     decoded_auth = get_decoded_auth(authorization)
-    if decoded_auth != f"ws:{AUTH_KEY}":
+    apiKey = get_secret()
+    expectedAuthValue = f"ws:{apiKey}"
+    if decoded_auth != expectedAuthValue:
         raise HTTPException(status_code=401, detail={"status": "error", "message": "Unauthorized", "error_code": 401})
     return {
         "model": "noobpk/dga-detection",
@@ -86,7 +103,9 @@ async def detection(payload: Payload, authorization: str = Header(None)):
     
 async def process_detection(payload: Payload, authorization: str):
     decoded_auth = get_decoded_auth(authorization)
-    if decoded_auth != f"ws:{AUTH_KEY}":
+    apiKey = get_secret()
+    expectedAuthValue = f"ws:{apiKey}"
+    if decoded_auth != expectedAuthValue:
         raise HTTPException(status_code=401, detail={"status": "error", "message": "Unauthorized", "error_code": 401})
     
     payload_data = payload.payload
