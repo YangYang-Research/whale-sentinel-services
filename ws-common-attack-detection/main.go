@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -13,9 +14,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/joho/godotenv"
 )
 
@@ -335,36 +336,46 @@ func sendErrorResponse(w http.ResponseWriter, message string, errorCode int) {
 	})
 }
 
-// decryptAPIKeyWithKMS decrypts the API key value using AWS KMS
-func decryptAPIKeyWithKMS(encryptedAPIKey string) (string, error) {
-	sess := session.Must(session.NewSession())
-	svc := kms.New(sess, aws.NewConfig().WithRegion(os.Getenv("AWS_REGION")))
-
-	decodedAPIKey, err := base64.StdEncoding.DecodeString(encryptedAPIKey)
-	if err != nil {
-		return "", fmt.Errorf("failed to decode encrypted API key: %v", err)
-	}
-
-	input := &kms.DecryptInput{
-		CiphertextBlob: decodedAPIKey,
-	}
-
-	result, err := svc.Decrypt(input)
-	if err != nil {
-		return "", fmt.Errorf("failed to decrypt API key: %v", err)
-	}
-
-	return string(result.Plaintext), nil
-}
-
 // getAPIKey retrieves the API key based on the configuration
 func getAPIKey() (string, error) {
-	if os.Getenv("AWS_KMS_ENABLE") == "true" {
-		encryptedAPIKey := os.Getenv("API_KEY")
-		return decryptAPIKeyWithKMS(encryptedAPIKey)
+	awsRegion := os.Getenv("AWS_REGION")
+	awsAPIKeyName := os.Getenv("AWS_API_KEY_NAME")
+
+	config, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(awsRegion))
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	return os.Getenv("API_KEY"), nil
+	// Create Secrets Manager client
+	svc := secretsmanager.NewFromConfig(config)
+
+	input := &secretsmanager.GetSecretValueInput{
+		SecretId:     aws.String(awsAPIKeyName),
+		VersionStage: aws.String("AWSCURRENT"), // VersionStage defaults to AWSCURRENT if unspecified
+	}
+
+	result, err := svc.GetSecretValue(context.TODO(), input)
+	if err != nil {
+		// For a list of exceptions thrown, see
+		// https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_GetSecretValue.html
+		log.Fatal(err.Error())
+	}
+
+	// Decrypts secret using the associated KMS key.
+	var secretString string = *result.SecretString
+
+	// Parse the JSON string to extract the apiKey
+	var secretData map[string]string
+	if err := json.Unmarshal([]byte(secretString), &secretData); err != nil {
+		log.Fatalf("Failed to parse secret string: %v", err)
+	}
+
+	apiKey, exists := secretData["apiKey"]
+	if !exists {
+		log.Fatalf("apiKey not found in secret string")
+	}
+
+	return apiKey, nil
 }
 
 // apiKeyAuthMiddleware is a middleware that handles API Key authentication
