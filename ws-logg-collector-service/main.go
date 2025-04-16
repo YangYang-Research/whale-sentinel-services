@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -13,7 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/elastic/go-elasticsearch"
+	"github.com/opensearch-project/opensearch-go"
 )
 
 type (
@@ -35,53 +37,51 @@ type (
 	}
 )
 
-type customHeaderTransport struct {
-	Authorization string
-	Transport     http.RoundTripper
-}
+var osClient *opensearch.Client
 
-func (t *customHeaderTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.Header.Set("Authorization", t.Authorization)
-	return t.Transport.RoundTrip(req)
-}
+func initOpensearch() {
+	username := os.Getenv("OPENSEARCH_USERNAME")
+	password := os.Getenv("OPENSEARCH_PASSWORD")
 
-var esClient *elasticsearch.Client
-
-func initElasticsearch() {
-	cfg := elasticsearch.Config{
+	cfg := opensearch.Config{
 		Addresses: []string{
 			os.Getenv("OPENSEARCH_ENDPOINT"),
 		},
-		Transport: &customHeaderTransport{
-			Authorization: "ApiKey " + os.Getenv("OPENSEARCH_API_KEY"),
-			Transport:     http.DefaultTransport,
+		Username: username,
+		Password: password,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
 	}
 
-	client, err := elasticsearch.NewClient(cfg)
+	client, err := opensearch.NewClient(cfg)
 	if err != nil {
 		log.Fatalf("Error creating the OpenSearch client: %s", err)
 	}
-	esClient = client
-	log.Println("Connected to OpenSearch")
+	osClient = client
+	log.Println("Connected to OpenSearch (via opensearch-go)")
 }
 
 func logHandler(w http.ResponseWriter, r *http.Request) {
+	// Ensure the request method is POST
 	if r.Method != http.MethodPost {
 		sendErrorResponse(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
 
+	// Decode the request body into a LogEntry struct
 	var entry LogEntry
 	if err := json.NewDecoder(r.Body).Decode(&entry); err != nil {
 		sendErrorResponse(w, "Invalid log format", http.StatusBadRequest)
 		return
 	}
 
+	// Set the timestamp if not provided
 	if entry.Timestamp == "" {
 		entry.Timestamp = time.Now().Format(time.RFC3339)
 	}
 
+	// Serialize the log entry to JSON
 	docBytes, err := json.Marshal(entry)
 	if err != nil {
 		sendErrorResponse(w, "Failed to serialize log", http.StatusInternalServerError)
@@ -89,20 +89,58 @@ func logHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Received log entry: %s", docBytes)
-	// indexName := "ws-gateway-logs-" + time.Now().Format("2006.01.02")
-	// res, err := esClient.Index(
-	// 	indexName,
-	// 	bytes.NewReader(docBytes),
-	// 	esClient.Index.WithContext(context.Background()),
-	// )
-	// if err != nil {
-	// 	log.Printf("Failed to index log: %v", err)
-	// 	http.Error(w, "Failed to send log", http.StatusInternalServerError)
-	// 	return
-	// }
-	// defer res.Body.Close()
 
-	// w.WriteHeader(http.StatusOK)
+	// Determine the index name based on the destination
+	indexName := getIndexName(entry.Destination)
+	if indexName == "" {
+		sendErrorResponse(w, "Unknown destination", http.StatusBadRequest)
+		return
+	}
+
+	// Index the log entry in OpenSearch
+	if err := indexLog(indexName, docBytes); err != nil {
+		log.Printf("Failed to index log: %v", err)
+		sendErrorResponse(w, "Failed to send log", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// Helper function to determine the index name based on the destination
+func getIndexName(destination string) string {
+	dateSuffix := time.Now().Format("2006.01.02")
+	switch destination {
+	case "ws-gateway-service":
+		return "ws-gateway-logs-" + dateSuffix
+	case "ws-web-attack-detection":
+		return "ws-web-attack-detection-logs-" + dateSuffix
+	case "ws-dga-detection":
+		return "ws-dga-detection-logs-" + dateSuffix
+	case "ws-common-attack-detection":
+		return "ws-common-attack-detection-logs-" + dateSuffix
+	default:
+		log.Printf("Unknown destination: %s", destination)
+		return ""
+	}
+}
+
+// Helper function to index a log entry in OpenSearch
+func indexLog(indexName string, docBytes []byte) error {
+	res, err := osClient.Index(
+		indexName,
+		bytes.NewReader(docBytes),
+		osClient.Index.WithContext(context.Background()),
+	)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		return fmt.Errorf("error indexing document: %s", res.String())
+	}
+	return nil
 }
 
 // sendErrorResponse sends a JSON error response
@@ -126,25 +164,19 @@ func getAPIKey() (string, error) {
 		log.Fatal(err)
 	}
 
-	// Create Secrets Manager client
 	svc := secretsmanager.NewFromConfig(config)
-
 	input := &secretsmanager.GetSecretValueInput{
 		SecretId:     aws.String(awsAPIKeyName),
-		VersionStage: aws.String("AWSCURRENT"), // VersionStage defaults to AWSCURRENT if unspecified
+		VersionStage: aws.String("AWSCURRENT"),
 	}
 
 	result, err := svc.GetSecretValue(context.TODO(), input)
 	if err != nil {
-		// For a list of exceptions thrown, see
-		// https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_GetSecretValue.html
 		log.Fatal(err.Error())
 	}
 
-	// Decrypts secret using the associated KMS key.
 	var secretString string = *result.SecretString
 
-	// Parse the JSON string to extract the apiKey
 	var secretData map[string]string
 	if err := json.Unmarshal([]byte(secretString), &secretData); err != nil {
 		log.Fatalf("Failed to parse secret string: %v", err)
@@ -173,7 +205,6 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Decode the Base64-encoded Authorization header
 		authHeader = authHeader[len("Basic "):]
 		decodedAuthHeader, err := base64.StdEncoding.DecodeString(authHeader)
 		if err != nil {
@@ -192,11 +223,8 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 }
 
 func main() {
-	initElasticsearch()
-	// Wrap the handler with a 30-second timeout
+	initOpensearch()
 	timeoutHandler := http.TimeoutHandler(apiKeyAuthMiddleware(http.HandlerFunc(logHandler)), 30*time.Second, "Request timed out")
-
-	// Register the timeout handler
 	http.Handle("/api/v1/logg-collector", timeoutHandler)
 	log.Printf("WS Logg Service running on port 5555...")
 	log.Fatal(http.ListenAndServe(":5555", nil))
