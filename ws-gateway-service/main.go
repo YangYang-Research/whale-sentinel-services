@@ -155,24 +155,6 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 		webAttackDetectionErr, commonAttackDetectionErr, dgaDetectionErr, loggCollection error
 	)
 
-	go func(agentID string, eventID string) {
-		logData := map[string]interface{}{
-			"timestamp":          time.Now().Format(time.RFC3339),
-			"agent_id":           agentID,
-			"event_id":           eventID,
-			"source":             agentID,
-			"destination":        "ws-gateway-service",
-			"request_created_at": req.RequestCreatedAt,
-			"level":              "info",
-			"message":            "Received request from agent",
-		}
-
-		loggCollection = processLoggCollection(logData)
-		if loggCollection != nil {
-			log.Printf("Error: Logg Collector: %v", loggCollection)
-		}
-	}(req.AgentID, eventID)
-
 	wg.Add(3)
 	go func() {
 		defer wg.Done()
@@ -227,6 +209,28 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+
+	// Log the request to the logg collector
+	go func(agentID string, eventID string) {
+		logData := map[string]interface{}{
+			"name":                 "ws-gateway-service",
+			"agent_id":             agentID,
+			"source":               agentID,
+			"destination":          "ws-gateway-service",
+			"event_id":             eventID,
+			"level":                "info",
+			"type":                 "agent_to_service",
+			"message":              "Received request from agent",
+			"request_created_at":   req.RequestCreatedAt,
+			"request_processed_at": time.Now().Format(time.RFC3339),
+			"timestamp":            time.Now().Format(time.RFC3339),
+		}
+
+		loggCollection = processLoggCollection(logData)
+		if loggCollection != nil {
+			log.Printf("Error: Logg Collector: %v", loggCollection)
+		}
+	}(req.AgentID, eventID)
 }
 
 // Helper functions
@@ -374,6 +378,7 @@ func processCommonAttackDetection(req RequestBody, eventID string) (bool, bool, 
 	log.Printf("Processing Common Attack Detection for Event ID: %s", eventID)
 
 	requestBody := map[string]interface{}{
+		"agent_id": req.AgentID,
 		"event_id": eventID,
 		"rules": map[string]string{
 			"detect_cross_site_scripting": req.Rules.CommonAttackDetection.DetectCrossSiteScripting,
