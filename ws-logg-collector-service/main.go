@@ -19,15 +19,67 @@ import (
 )
 
 type (
-	LogEntry struct {
-		Timestamp        string `json:"timestamp"`
+	WSGate_LogEntry struct {
+		Name             string `json:"name"`
 		AgentID          string `json:"agent_id"`
-		Level            string `json:"level"`
 		Source           string `json:"source"`
 		Destination      string `json:"destination"`
 		EventID          string `json:"event_id"`
+		Level            string `json:"level"`
+		Type             string `json:"type"`
 		RequestCreatedAt string `json:"request_created_at"`
 		Message          string `json:"message"`
+		Timestamp        string `json:"timestamp"`
+	}
+
+	WSCommonAttack_LogEntry struct {
+		Name                  string                    `json:"name"`
+		AgentID               string                    `json:"agent_id"`
+		Source                string                    `json:"source"`
+		Destination           string                    `json:"destination"`
+		EventID               string                    `json:"event_id"`
+		Level                 string                    `json:"level"`
+		Type                  string                    `json:"type"`
+		CommonAttackDetection CommonAttackDetectionRule `json:"common_attack_detection"`
+		RequestCreatedAt      string                    `json:"request_created_at"`
+		Message               string                    `json:"message"`
+		Timestamp             string                    `json:"timestamp"`
+	}
+
+	CommonAttackDetectionRule struct {
+		CrossSiteScripting string `json:"cross_site_scripting"`
+		LargeRequest       string `json:"large_request"`
+		SqlInjection       string `json:"sql_injection"`
+		HTTPVerbTampering  string `json:"http_verb_tampering"`
+		HTTPLargeRequest   string `json:"http_large_request"`
+	}
+
+	WSDGA_LogEntry struct {
+		Name             string `json:"name"`
+		AgentID          string `json:"agent_id"`
+		Source           string `json:"source"`
+		Destination      string `json:"destination"`
+		EventID          string `json:"event_id"`
+		Level            string `json:"level"`
+		Type             string `json:"type"`
+		Score            string `json:"score"`
+		RequestCreatedAt string `json:"request_created_at"`
+		Message          string `json:"message"`
+		Timestamp        string `json:"timestamp"`
+	}
+
+	WSWebAttack_LogEntry struct {
+		Name             string `json:"name"`
+		AgentID          string `json:"agent_id"`
+		Source           string `json:"source"`
+		Destination      string `json:"destination"`
+		EventID          string `json:"event_id"`
+		Level            string `json:"level"`
+		Type             string `json:"type"`
+		Score            string `json:"score"`
+		RequestCreatedAt string `json:"request_created_at"`
+		Message          string `json:"message"`
+		Timestamp        string `json:"timestamp"`
 	}
 
 	ErrorResponse struct {
@@ -69,20 +121,27 @@ func logHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Decode the request body into a LogEntry struct
-	var entry LogEntry
-	if err := json.NewDecoder(r.Body).Decode(&entry); err != nil {
-		sendErrorResponse(w, "Invalid log format", http.StatusBadRequest)
+	// Parse the incoming body into a generic map to detect type
+	var generic map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&generic); err != nil {
+		sendErrorResponse(w, "Invalid JSON format", http.StatusBadRequest)
 		return
 	}
 
-	// Set the timestamp if not provided
-	if entry.Timestamp == "" {
-		entry.Timestamp = time.Now().Format(time.RFC3339)
+	// Get `name` to determine the index
+	name, ok := generic["name"].(string)
+	if !ok || name == "" {
+		sendErrorResponse(w, "`name` field is required to determine log type", http.StatusBadRequest)
+		return
 	}
 
-	// Serialize the log entry to JSON
-	docBytes, err := json.Marshal(entry)
+	// Add missing timestamp if not provided
+	if _, ok := generic["timestamp"]; !ok {
+		generic["timestamp"] = time.Now().Format(time.RFC3339)
+	}
+
+	// Marshal back to JSON
+	docBytes, err := json.Marshal(generic)
 	if err != nil {
 		sendErrorResponse(w, "Failed to serialize log", http.StatusInternalServerError)
 		return
@@ -90,17 +149,15 @@ func logHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Received log entry: %s", docBytes)
 
-	// Determine the index name based on the destination
-	indexName := getIndexName(entry.Destination)
+	indexName := getIndexName(name)
 	if indexName == "" {
-		sendErrorResponse(w, "Unknown destination", http.StatusBadRequest)
+		sendErrorResponse(w, "Unknown log name", http.StatusBadRequest)
 		return
 	}
 
-	// Index the log entry in OpenSearch
 	if err := indexLog(indexName, docBytes); err != nil {
 		log.Printf("Failed to index log: %v", err)
-		sendErrorResponse(w, "Failed to send log", http.StatusInternalServerError)
+		sendErrorResponse(w, "Failed to index log", http.StatusInternalServerError)
 		return
 	}
 
@@ -108,9 +165,9 @@ func logHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // Helper function to determine the index name based on the destination
-func getIndexName(destination string) string {
+func getIndexName(name string) string {
 	dateSuffix := time.Now().Format("2006.01.02")
-	switch destination {
+	switch name {
 	case "ws-gateway-service":
 		return "ws-gateway-logs-" + dateSuffix
 	case "ws-web-attack-detection":
@@ -120,7 +177,7 @@ func getIndexName(destination string) string {
 	case "ws-common-attack-detection":
 		return "ws-common-attack-detection-logs-" + dateSuffix
 	default:
-		log.Printf("Unknown destination: %s", destination)
+		log.Printf("Unknown name: %s", name)
 		return ""
 	}
 }
