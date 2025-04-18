@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -111,6 +113,20 @@ type ErrorResponse struct {
 	Status    string `json:"status"`
 	Message   string `json:"message"`
 	ErrorCode int    `json:"error_code"`
+}
+
+// extractEventID extracts the components of the event_id string.
+func extractEventID(eventID string) (string, string, string, error) {
+	// Split the event_id by the "|" delimiter
+	parts := strings.Split(eventID, "|")
+
+	// Ensure the split result has exactly 3 parts
+	if len(parts) != 3 {
+		return "", "", "", fmt.Errorf("invalid event_id format: %s", eventID)
+	}
+
+	// Return the extracted components
+	return parts[0], parts[1], parts[2], nil
 }
 
 // wsHandleDecoder decodes the input string
@@ -325,6 +341,50 @@ func wsLargeRequestDetection(input int) (bool, error) {
 	return false, nil
 }
 
+func processLoggCollection(data interface{}) error {
+	log.Printf("Processing Logg Collection....")
+	// Call the logg collector endpoint
+	log.Printf("Logg Data: %s", data)
+	_, err := makeHTTPRequest(os.Getenv("WS_MODULE_LOGG_COLLECTOR_URL"), os.Getenv("WS_MODULE_LOGG_COLLECTOR_ENDPOINT"), data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
+	jsonData, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request body: %v", err)
+	}
+
+	apiKey, err := getAPIKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get API key: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", url+endpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	auth := "ws:" + apiKey
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call endpoint: %v", err)
+	}
+	defer resp.Body.Close()
+
+	return io.ReadAll(resp.Body)
+}
+
 // sendErrorResponse sends a JSON error response
 func sendErrorResponse(w http.ResponseWriter, message string, errorCode int) {
 	w.Header().Set("Content-Type", "application/json")
@@ -418,7 +478,10 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req RequestBody
+	var (
+		req            RequestBody
+		loggCollection error
+	)
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		sendErrorResponse(w, "Invalid request payload", http.StatusBadRequest)
@@ -428,6 +491,13 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	// Validate required fields
 	if req.Payload.Data.ClientInformation.IP == "" || req.Payload.Data.ClientInformation.DeviceType == "" || req.Payload.Data.ClientInformation.NetworkType == "" || req.Payload.Data.HTTPRequest.Method == "" || req.Payload.Data.HTTPRequest.URL == "" || req.Payload.Data.HTTPRequest.Headers.UserAgent == "" || req.Payload.Data.HTTPRequest.Headers.ContentType == "" {
 		sendErrorResponse(w, "Missing required fields", http.StatusBadRequest)
+		return
+	}
+
+	// Extract components from event_id
+	agentID, service, _, err := extractEventID(req.EventID)
+	if err != nil {
+		sendErrorResponse(w, "Error extracting event_id: %v", http.StatusBadRequest)
 		return
 	}
 
@@ -487,17 +557,70 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 		HTTPLargeRequestDetection:   httpLargeRequestFound,
 	}
 
+	eventID := strings.Replace(req.EventID, "WS_GATEWAY_SERVICE", "WS_COMMON_ATTACK_DETECTION", -1)
 	response := ResponseBody{
 		Status:             "success",
 		Message:            "Request processed successfully",
 		Data:               data,
-		EventID:            strings.Replace(req.EventID, "WS_GATEWAY_SERVICE", "WS_COMMON_ATTACK_DETECTION", -1),
+		EventID:            eventID,
 		RequestCreatedAt:   req.RequestCreatedAt,
 		RequestProcessedAt: time.Now().Format(time.RFC3339),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+
+	// Log the request to the logg collector
+	go func(agentID string, eventID string) {
+		logData := map[string]interface{}{
+			"name":        "ws-common-attack-detection",
+			"agent_id":    agentID,
+			"source":      strings.ToLower(service),
+			"destination": "ws-common-attack-detection",
+			"event_id":    eventID,
+			"level":       "info",
+			"common_attack_detection": map[string]int{
+				"cross_site_scripting": func() int {
+					if xssFound {
+						return 1
+					} else {
+						return 0
+					}
+				}(),
+				"sql_injection": func() int {
+					if sqlInjectionFound {
+						return 1
+					} else {
+						return 0
+					}
+				}(),
+				"http_verb_tampering": func() int {
+					if httpVerbTamperingFound {
+						return 1
+					} else {
+						return 0
+					}
+				}(),
+				"http_large_request": func() int {
+					if httpLargeRequestFound {
+						return 1
+					} else {
+						return 0
+					}
+				}(),
+			},
+			"type":                 "service_to_service",
+			"message":              "Received request from service",
+			"request_created_at":   req.RequestCreatedAt,
+			"request_processed_at": time.Now().Format(time.RFC3339),
+			"timestamp":            time.Now().Format(time.RFC3339),
+		}
+
+		loggCollection = processLoggCollection(logData)
+		if loggCollection != nil {
+			log.Printf("Error: Logg Collector: %v", loggCollection)
+		}
+	}(agentID, eventID)
 }
 
 func main() {
