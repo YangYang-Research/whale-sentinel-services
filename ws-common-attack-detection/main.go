@@ -1,13 +1,10 @@
 package main
 
 import (
-	"bytes"
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -16,9 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/YangYang-Research/whale-sentinel-go-libraries/wshelper"
+	"github.com/YangYang-Research/whale-sentinel-go-libraries/wslogger"
 	"github.com/joho/godotenv"
 )
 
@@ -31,7 +27,7 @@ func init() {
 
 // RequestBody defines the structure of the request payload
 type RequestBody struct {
-	EventID          string  `json:"event_id"`
+	EventInfo        string  `json:"event_info"`
 	Rules            Rules   `json:"rules"`
 	Payload          Payload `json:"payload"`
 	RequestCreatedAt string  `json:"request_created_at"`
@@ -39,11 +35,11 @@ type RequestBody struct {
 
 // Rule defines the structure of the rule field in the request body
 type Rules struct {
-	DetectCrossSiteScripting string `json:"detect_cross_site_scripting"`
-	DetectLargeRequest       string `json:"detect_large_request"`
-	DetectSqlInjection       string `json:"detect_sql_injection"`
-	DetectHTTPVerbTampering  string `json:"detect_http_verb_tampering"`
-	DetectHTTPLargeRequest   string `json:"detect_http_large_request"`
+	DetectCrossSiteScripting bool `json:"detect_cross_site_scripting"`
+	DetectLargeRequest       bool `json:"detect_large_request"`
+	DetectSqlInjection       bool `json:"detect_sql_injection"`
+	DetectHTTPVerbTampering  bool `json:"detect_http_verb_tampering"`
+	DetectHTTPLargeRequest   bool `json:"detect_http_large_request"`
 }
 
 // Payload defines the structure of the payload field in the request body
@@ -96,7 +92,7 @@ type ResponseBody struct {
 	Status             string       `json:"status"`
 	Message            string       `json:"message"`
 	Data               ResponseData `json:"data"`
-	EventID            string       `json:"event_id"`
+	EventInfo          string       `json:"event_info"`
 	RequestCreatedAt   string       `json:"request_created_at"`
 	RequestProcessedAt string       `json:"request_processed_at"`
 }
@@ -116,13 +112,13 @@ type ErrorResponse struct {
 }
 
 // extractEventID extracts the components of the event_id string.
-func extractEventID(eventID string) (string, string, string, error) {
+func extractEventInfo(enventInfo string) (string, string, string, error) {
 	// Split the event_id by the "|" delimiter
-	parts := strings.Split(eventID, "|")
+	parts := strings.Split(enventInfo, "|")
 
 	// Ensure the split result has exactly 3 parts
 	if len(parts) != 3 {
-		return "", "", "", fmt.Errorf("invalid event_id format: %s", eventID)
+		return "", "", "", fmt.Errorf("invalid event_info format: %s", enventInfo)
 	}
 
 	// Return the extracted components
@@ -341,50 +337,6 @@ func wsLargeRequestDetection(input int) (bool, error) {
 	return false, nil
 }
 
-func processLoggCollection(data interface{}) error {
-	log.Printf("Processing Logg Collection....")
-	// Call the logg collector endpoint
-	log.Printf("Logg Data: %s", data)
-	_, err := makeHTTPRequest(os.Getenv("WS_MODULE_LOGG_COLLECTOR_URL"), os.Getenv("WS_MODULE_LOGG_COLLECTOR_ENDPOINT"), data)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
-	jsonData, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request body: %v", err)
-	}
-
-	apiKey, err := getAPIKey()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get API key: %v", err)
-	}
-
-	req, err := http.NewRequest("POST", url+endpoint, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	auth := "ws:" + apiKey
-	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
-
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to call endpoint: %v", err)
-	}
-	defer resp.Body.Close()
-
-	return io.ReadAll(resp.Body)
-}
-
 // sendErrorResponse sends a JSON error response
 func sendErrorResponse(w http.ResponseWriter, message string, errorCode int) {
 	w.Header().Set("Content-Type", "application/json")
@@ -399,43 +351,12 @@ func sendErrorResponse(w http.ResponseWriter, message string, errorCode int) {
 // getAPIKey retrieves the API key based on the configuration
 func getAPIKey() (string, error) {
 	awsRegion := os.Getenv("AWS_REGION")
-	awsAPIKeyName := os.Getenv("AWS_API_KEY_NAME")
+	awsSecretName := os.Getenv("AWS_SECRET_NAME")
+	awsAPISecretKeyName := os.Getenv("AWS_API_SECRET_KEY_NAME")
 
-	config, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(awsRegion))
-	if err != nil {
-		log.Fatal(err)
-	}
+	awsAPIKeyVaule, err := wshelper.GetAWSSecret(awsRegion, awsSecretName, awsAPISecretKeyName)
 
-	// Create Secrets Manager client
-	svc := secretsmanager.NewFromConfig(config)
-
-	input := &secretsmanager.GetSecretValueInput{
-		SecretId:     aws.String(awsAPIKeyName),
-		VersionStage: aws.String("AWSCURRENT"), // VersionStage defaults to AWSCURRENT if unspecified
-	}
-
-	result, err := svc.GetSecretValue(context.TODO(), input)
-	if err != nil {
-		// For a list of exceptions thrown, see
-		// https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_GetSecretValue.html
-		log.Fatal(err.Error())
-	}
-
-	// Decrypts secret using the associated KMS key.
-	var secretString string = *result.SecretString
-
-	// Parse the JSON string to extract the apiKey
-	var secretData map[string]string
-	if err := json.Unmarshal([]byte(secretString), &secretData); err != nil {
-		log.Fatalf("Failed to parse secret string: %v", err)
-	}
-
-	apiKey, exists := secretData["apiKey"]
-	if !exists {
-		log.Fatalf("apiKey not found in secret string")
-	}
-
-	return apiKey, nil
+	return awsAPIKeyVaule, err
 }
 
 // apiKeyAuthMiddleware is a middleware that handles API Key authentication
@@ -479,8 +400,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var (
-		req            RequestBody
-		loggCollection error
+		req RequestBody
 	)
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -495,7 +415,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Extract components from event_id
-	agentID, service, _, err := extractEventID(req.EventID)
+	agentID, serviceName, eventID, err := extractEventInfo(req.EventInfo)
 	if err != nil {
 		sendErrorResponse(w, "Error extracting event_id: %v", http.StatusBadRequest)
 		return
@@ -503,7 +423,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 
 	// Process the rules
 	var xssFound bool
-	if req.Rules.DetectCrossSiteScripting == "true" {
+	if req.Rules.DetectCrossSiteScripting {
 		payload := req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
 		decodedPayload, err := wsHandleDecoder(payload)
 		if err != nil {
@@ -518,7 +438,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var sqlInjectionFound bool
-	if req.Rules.DetectSqlInjection == "true" {
+	if req.Rules.DetectSqlInjection {
 		payload := req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
 		decodedPayload, err := wsHandleDecoder(payload)
 		if err != nil {
@@ -533,7 +453,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var httpVerbTamperingFound bool
-	if req.Rules.DetectHTTPVerbTampering == "true" {
+	if req.Rules.DetectHTTPVerbTampering {
 		httpVerbTamperingFound, err = wsHTTPVerbTamperingDetection(req.Payload.Data.HTTPRequest.Method)
 		if err != nil {
 			sendErrorResponse(w, "Error processing data", http.StatusInternalServerError)
@@ -542,7 +462,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var httpLargeRequestFound bool
-	if req.Rules.DetectHTTPLargeRequest == "true" {
+	if req.Rules.DetectHTTPLargeRequest {
 		httpLargeRequestFound, err = wsLargeRequestDetection(req.Payload.Data.HTTPRequest.Headers.ContentLength)
 		if err != nil {
 			sendErrorResponse(w, "Error processing data", http.StatusInternalServerError)
@@ -557,12 +477,12 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 		HTTPLargeRequestDetection:   httpLargeRequestFound,
 	}
 
-	eventID := strings.Replace(req.EventID, "WS_GATEWAY_SERVICE", "WS_COMMON_ATTACK_DETECTION", -1)
+	eventInfo := strings.Replace(req.EventInfo, "WS_GATEWAY_SERVICE", "WS_COMMON_ATTACK_DETECTION", -1)
 	response := ResponseBody{
 		Status:             "success",
 		Message:            "Request processed successfully",
 		Data:               data,
-		EventID:            eventID,
+		EventInfo:          eventInfo,
 		RequestCreatedAt:   req.RequestCreatedAt,
 		RequestProcessedAt: time.Now().Format(time.RFC3339),
 	}
@@ -571,56 +491,30 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 
 	// Log the request to the logg collector
-	go func(agentID string, eventID string) {
+	go func(agentID string, eventInfo string, rawRequest string) {
 		logData := map[string]interface{}{
 			"name":        "ws-common-attack-detection",
 			"agent_id":    agentID,
-			"source":      strings.ToLower(service),
+			"source":      strings.ToLower(serviceName),
 			"destination": "ws-common-attack-detection",
+			"event_info":  eventInfo,
 			"event_id":    eventID,
-			"level":       "info",
-			"common_attack_detection": map[string]int{
-				"cross_site_scripting": func() int {
-					if xssFound {
-						return 1
-					} else {
-						return 0
-					}
-				}(),
-				"sql_injection": func() int {
-					if sqlInjectionFound {
-						return 1
-					} else {
-						return 0
-					}
-				}(),
-				"http_verb_tampering": func() int {
-					if httpVerbTamperingFound {
-						return 1
-					} else {
-						return 0
-					}
-				}(),
-				"http_large_request": func() int {
-					if httpLargeRequestFound {
-						return 1
-					} else {
-						return 0
-					}
-				}(),
-			},
-			"type":                 "service_to_service",
-			"message":              "Received request from service",
+			"type":        "SERVICE_EVENT",
+			"common_attack_detection": (map[string]bool{
+				"cross_site_scripting": xssFound,
+				"sql_injection":        sqlInjectionFound,
+				"http_verb_tampering":  httpVerbTamperingFound,
+				"http_large_request":   httpLargeRequestFound,
+			}),
+			"title":                "Received request from service",
 			"request_created_at":   req.RequestCreatedAt,
 			"request_processed_at": time.Now().Format(time.RFC3339),
+			"raw_request":          rawRequest,
 			"timestamp":            time.Now().Format(time.RFC3339),
 		}
 
-		loggCollection = processLoggCollection(logData)
-		if loggCollection != nil {
-			log.Printf("Error: Logg Collector: %v", loggCollection)
-		}
-	}(agentID, eventID)
+		wslogger.Log("info", "ws-common-attack-detection", logData)
+	}(agentID, eventInfo, (req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body))
 }
 
 func main() {
