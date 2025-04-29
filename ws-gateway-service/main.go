@@ -561,12 +561,6 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 
 // Main function
 func main() {
-	// Initialize the logger
-	logMaxSize, _ := strconv.Atoi(os.Getenv("LOG_MAX_SIZE"))
-	logMaxBackups, _ := strconv.Atoi(os.Getenv("LOG_MAX_BACKUPS"))
-	logMaxAge, _ := strconv.Atoi(os.Getenv("LOG_MAX_AGE"))
-	logCompression, _ := strconv.ParseBool(os.Getenv("LOG_COMPRESSION"))
-	wslogger.SetupWSLogger("ws-gateway-service", logMaxSize, logMaxBackups, logMaxAge, logCompression)
 	// Wrap the handler with a 30-second timeout
 	timeoutHandler := http.TimeoutHandler(apiKeyAuthMiddleware(http.HandlerFunc(handleGateway)), 30*time.Second, "Request timed out")
 
@@ -574,4 +568,11 @@ func main() {
 	http.Handle("/api/v1/ws/services/gateway", timeoutHandler)
 	log.Println("WS Gateway Service is running on port 5000...")
 	log.Fatal(http.ListenAndServe(":5000", nil))
+
+	// Initialize the logger
+	logMaxSize, _ := strconv.Atoi(os.Getenv("LOG_MAX_SIZE"))
+	logMaxBackups, _ := strconv.Atoi(os.Getenv("LOG_MAX_BACKUPS"))
+	logMaxAge, _ := strconv.Atoi(os.Getenv("LOG_MAX_AGE"))
+	logCompression, _ := strconv.ParseBool(os.Getenv("LOG_COMPRESSION"))
+	wslogger.SetupWSLogger("ws-gateway-service", logMaxSize, logMaxBackups, logMaxAge, logCompression)
 }
