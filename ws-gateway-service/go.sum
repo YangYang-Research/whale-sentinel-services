@@ -1,5 +1,5 @@
-github.com/YangYang-Research/whale-sentinel-go-libraries v1.0.4-b h1:iA3bCq5RsfcP+/vI33nCjxXRv4gd/5tbBhf6AGEvzjw=
-github.com/YangYang-Research/whale-sentinel-go-libraries v1.0.4-b/go.mod h1:i1xiHdnxploM/uW5p0mU8yk6/Kw+WftY5FEjdKvQIwA=
+github.com/YangYang-Research/whale-sentinel-go-libraries v1.0.5 h1:RNRVigZzC7MpYVLxJWUPuoWWPmV/9XzM2MMTecrcvsA=
+github.com/YangYang-Research/whale-sentinel-go-libraries v1.0.5/go.mod h1:h3fe2ZeE/TFO9fkPr2MpWGObPPQ1yCU3heXW52gqtEA=
 github.com/aws/aws-sdk-go v1.55.6 h1:cSg4pvZ3m8dgYcgqB97MrcdjUmZ1BeMYKUxMMB89IPk=
 github.com/aws/aws-sdk-go v1.55.6/go.mod h1:eRwEWoyTWFMVYVQzKMNHWP5/RV4xIUGMQfXQHfHkpNU=
 github.com/aws/aws-sdk-go-v2 v1.36.3 h1:mJoei2CxPutQVxaATCzDUjcZEjVRdpsiiXi2o38yqWM=
@@ -36,3 +36,5 @@ github.com/jmespath/go-jmespath v0.4.0 h1:BEgLn5cpjn8UN1mAw4NjwDrS35OdebyEtFe+9Y
 github.com/jmespath/go-jmespath v0.4.0/go.mod h1:T8mJZnbsbmF+m6zOOFylbeCJqk5+pHWvzYPziyZiYoo=
 github.com/joho/godotenv v1.5.1 h1:7eLL/+HRGLY0ldzfGMeQkb7vMd0as4CfYvUVzLqw0N0=
 github.com/joho/godotenv v1.5.1/go.mod h1:f4LDr5Voq0i2e/R5DDNOoa2zzDfwtkZa6DnEwAbqwq4=
+gopkg.in/natefinch/lumberjack.v2 v2.2.1 h1:bBRl1b0OH9s/DuPhuXpNl+VtCaJXFZ5/uEFST95x9zc=
+gopkg.in/natefinch/lumberjack.v2 v2.2.1/go.mod h1:YD8tP3GAjkrDg1eZH7EGmyESg/lsYskCTPBJVb9jqSc=

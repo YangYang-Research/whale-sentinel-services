@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"sync"
 	"time"
 
@@ -210,6 +211,7 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 
 	// Log the request to the logg collector
 	go func(agentID string, eventInfo string, rawRequest string) {
+		// Log the request to the log collector
 		logData := map[string]interface{}{
 			"name":                 "ws-gateway-service",
 			"agent_id":             agentID,
@@ -225,7 +227,7 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 			"timestamp":            time.Now().Format(time.RFC3339),
 		}
 
-		wslogger.Log("info", "ws-gateway-service", logData)
+		wslogger.Log("INFO", "ws-gateway-service", logData)
 	}(req.AgentID, eventInfo, (req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body))
 }
 
@@ -559,6 +561,12 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 
 // Main function
 func main() {
+	// Initialize the logger
+	logMaxSize, _ := strconv.Atoi(os.Getenv("LOG_MAX_SIZE"))
+	logMaxBackups, _ := strconv.Atoi(os.Getenv("LOG_MAX_BACKUPS"))
+	logMaxAge, _ := strconv.Atoi(os.Getenv("LOG_MAX_AGE"))
+	logCompression, _ := strconv.ParseBool(os.Getenv("LOG_COMPRESSION"))
+	wslogger.SetupWSLogger("ws-gateway-service", logMaxSize, logMaxBackups, logMaxAge, logCompression)
 	// Wrap the handler with a 30-second timeout
 	timeoutHandler := http.TimeoutHandler(apiKeyAuthMiddleware(http.HandlerFunc(handleGateway)), 30*time.Second, "Request timed out")
 
