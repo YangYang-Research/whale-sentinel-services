@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,12 +19,17 @@ import (
 	"github.com/YangYang-Research/whale-sentinel-go-libraries/wshelper"
 	"github.com/YangYang-Research/whale-sentinel-go-libraries/wslogger"
 	"github.com/joho/godotenv"
+	"github.com/sirupsen/logrus"
 )
+
+var log *logrus.Logger
 
 // Load environment variables
 func init() {
 	if err := godotenv.Load(); err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
+		log.WithFields(logrus.Fields{
+			"msg": err,
+		}).Error("Error loading .env file")
 	}
 }
 
@@ -182,8 +186,22 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 
 	wg.Wait()
 
-	if webAttackDetectionErr != nil || commonAttackDetectionErr != nil || dgaDetectionErr != nil {
-		log.Printf("Errors: Web Attack Detection: %v, Common Attack Detection: %v, DGA Detection %v", webAttackDetectionErr, commonAttackDetectionErr, dgaDetectionErr)
+	if webAttackDetectionErr != nil {
+		log.WithFields(logrus.Fields{
+			"msg": webAttackDetectionErr,
+		}).Error("Error processing Web Attack Detection")
+	}
+
+	if commonAttackDetectionErr != nil {
+		log.WithFields(logrus.Fields{
+			"msg": commonAttackDetectionErr,
+		}).Error("Error processing Common Attack Detection")
+	}
+
+	if dgaDetectionErr != nil {
+		log.WithFields(logrus.Fields{
+			"msg": dgaDetectionErr,
+		}).Error("Error processing DGA Detection")
 	}
 
 	data := ResponseData{
@@ -287,8 +305,10 @@ func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func processWebAttackDetection(req RequestBody, eventID string) (float64, error) {
-	log.Printf("Processing Web Attack Detection for Event ID: %s", eventID)
+func processWebAttackDetection(req RequestBody, eventInfo string) (float64, error) {
+	log.WithFields(logrus.Fields{
+		"msg": "Event Info: " + eventInfo,
+	}).Debug("Processing Web Attack Detection")
 
 	httpRequest := req.Payload.Data.HTTPRequest
 	var concatenatedData string
@@ -302,7 +322,7 @@ func processWebAttackDetection(req RequestBody, eventID string) (float64, error)
 	}
 
 	requestBody := map[string]interface{}{
-		"event_id":           eventID,
+		"event_info":         eventInfo,
 		"payload":            concatenatedData,
 		"request_created_at": time.Now().Format(time.RFC3339),
 	}
@@ -319,7 +339,9 @@ func processWebAttackDetection(req RequestBody, eventID string) (float64, error)
 
 	//Debug: Log the response JSON
 	// log.Printf("Response JSON: %+v", response)
-	log.Printf("Processed Web Attack Detection for Event ID: %s", response["event_id"])
+	log.WithFields(logrus.Fields{
+		"msg": "Event ID: " + eventInfo,
+	}).Debug("Processed Web Attack Detection")
 
 	// Check if the "data" key exists and is not nil
 	dataValue, ok := response["data"]
@@ -361,7 +383,9 @@ func processWebAttackDetection(req RequestBody, eventID string) (float64, error)
 }
 
 func processCommonAttackDetection(req RequestBody, eventInfo string) (bool, bool, bool, bool, error) {
-	log.Printf("Processing Common Attack Detection for Event ID: %s", eventInfo)
+	log.WithFields(logrus.Fields{
+		"msg": "Event Info: " + eventInfo,
+	}).Debug("Processing Common Attack Detection")
 
 	requestBody := map[string]interface{}{
 		"agent_id":   req.AgentID,
@@ -416,7 +440,9 @@ func processCommonAttackDetection(req RequestBody, eventInfo string) (bool, bool
 
 	//Debug: Log the response JSON
 	//log.Printf("Response JSON: %+v", response)
-	log.Printf("Processed Common Attack Detection for Event ID: %s", response["event_id"])
+	log.WithFields(logrus.Fields{
+		"msg": "Event Info: " + eventInfo,
+	}).Debug("Processed Common Attack Detection")
 
 	data := response["data"].(map[string]interface{})
 	return data["cross_site_scripting_detection"].(bool),
@@ -434,8 +460,10 @@ func getDomain(fullUrl string) (string, error) {
 	return parsedUrl.Host, nil
 }
 
-func processDGADetection(req RequestBody, eventID string) (float64, error) {
-	log.Printf("Processing DGA Detection for Event ID: %s", eventID)
+func processDGADetection(req RequestBody, eventInfo string) (float64, error) {
+	log.WithFields(logrus.Fields{
+		"msg": "Event Info: " + eventInfo,
+	}).Debug("Processing DGA Detection")
 
 	refererURL := req.Payload.Data.HTTPRequest.Headers.Referer
 
@@ -445,7 +473,7 @@ func processDGADetection(req RequestBody, eventID string) (float64, error) {
 	}
 
 	RequestBody := map[string]string{
-		"event_id":           eventID,
+		"event_info":         eventInfo,
 		"payload":            domain,
 		"request_created_at": time.Now().Format(time.RFC3339),
 	}
@@ -462,7 +490,9 @@ func processDGADetection(req RequestBody, eventID string) (float64, error) {
 
 	//Debug: Log the response JSON
 	// log.Printf("Response JSON: %+v", response)
-	log.Printf("Processed DGA Detection for Event ID: %s", response["event_id"])
+	log.WithFields(logrus.Fields{
+		"msg": "Event Info: " + eventInfo,
+	}).Debug("Processed DGA Detection")
 
 	// Check if the "data" key exists and is not nil
 	dataValue, ok := response["data"]
@@ -561,18 +591,22 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 
 // Main function
 func main() {
-	// Wrap the handler with a 30-second timeout
-	timeoutHandler := http.TimeoutHandler(apiKeyAuthMiddleware(http.HandlerFunc(handleGateway)), 30*time.Second, "Request timed out")
-
-	// Register the timeout handler
-	http.Handle("/api/v1/ws/services/gateway", timeoutHandler)
-	log.Println("WS Gateway Service is running on port 5000...")
-	log.Fatal(http.ListenAndServe(":5000", nil))
-
-	// Initialize the logger
+	// Initialize the application logger
+	log = logrus.New()
+	log.SetFormatter(&logrus.TextFormatter{})
+	log.SetOutput(os.Stdout)
+	log.SetLevel(logrus.DebugLevel)
+	log.Info("WS Gateway Service is running on port 5000...")
+	// Initialize the wslogger
 	logMaxSize, _ := strconv.Atoi(os.Getenv("LOG_MAX_SIZE"))
 	logMaxBackups, _ := strconv.Atoi(os.Getenv("LOG_MAX_BACKUPS"))
 	logMaxAge, _ := strconv.Atoi(os.Getenv("LOG_MAX_AGE"))
 	logCompression, _ := strconv.ParseBool(os.Getenv("LOG_COMPRESSION"))
 	wslogger.SetupWSLogger("ws-gateway-service", logMaxSize, logMaxBackups, logMaxAge, logCompression)
+	// Wrap the handler with a 30-second timeout
+	timeoutHandler := http.TimeoutHandler(apiKeyAuthMiddleware(http.HandlerFunc(handleGateway)), 30*time.Second, "Request timed out")
+
+	// Register the timeout handler
+	http.Handle("/api/v1/ws/services/gateway", timeoutHandler)
+	log.Fatal(http.ListenAndServe(":5000", nil))
 }
