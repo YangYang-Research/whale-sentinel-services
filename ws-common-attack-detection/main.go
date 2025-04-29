@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -492,6 +493,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 
 	// Log the request to the logg collector
 	go func(agentID string, eventInfo string, rawRequest string) {
+		// Log the request to the log collector
 		logData := map[string]interface{}{
 			"name":        "ws-common-attack-detection",
 			"agent_id":    agentID,
@@ -518,11 +520,18 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	log.Println("WS Common Attack Detection is running on port 5003...")
+	// Initialize the logger
+	logMaxSize, _ := strconv.Atoi(os.Getenv("LOG_MAX_SIZE"))
+	logMaxBackups, _ := strconv.Atoi(os.Getenv("LOG_MAX_BACKUPS"))
+	logMaxAge, _ := strconv.Atoi(os.Getenv("LOG_MAX_AGE"))
+	logCompression, _ := strconv.ParseBool(os.Getenv("LOG_COMPRESSION"))
+	wslogger.SetupWSLogger("ws-common-attack-detection", logMaxSize, logMaxBackups, logMaxAge, logCompression)
+
 	// Wrap the handler with a 30-second timeout
 	timeoutHandler := http.TimeoutHandler(http.HandlerFunc(handleData), 30*time.Second, "Request timed out")
 
 	// Register the timeout handler
 	http.Handle("/api/v1/ws/services/common-attack-detection", apiKeyAuthMiddleware(timeoutHandler))
-	log.Println("WS Common Attack Detection is running on port 5003...")
 	log.Fatal(http.ListenAndServe(":5003", nil))
 }
