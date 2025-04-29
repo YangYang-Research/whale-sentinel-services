@@ -11,7 +11,7 @@ require (
 )
 
 require (
-	github.com/YangYang-Research/whale-sentinel-go-libraries v1.0.8
+	github.com/YangYang-Research/whale-sentinel-go-libraries v1.0.9
 	github.com/aws/aws-sdk-go v1.55.6 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.36.3 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.67 // indirect
