@@ -11,7 +11,7 @@ LOG_MAX_SIZE = os.getenv("LOG_MAX_SIZE", 10000000)  # in bytes
 LOG_MAX_BACKUPS = os.getenv("LOG_MAX_BACKUPS", 3)  # number of backup files
 
 class CustomFormatter(logging.Formatter):
-    def format(self, record):
+    def formatLevel(self, record):
         # Convert levelname to lowercase
         record.levelname = record.levelname.lower()
         return super().format(record)
