@@ -33,8 +33,7 @@ load_dotenv()
 
 AWS_REGION = os.getenv("AWS_REGION")
 AWS_API_KEY_NAME = os.getenv("AWS_API_KEY_NAME")
-WS_MODULE_LOGG_COLLECTOR_URL = os.getenv("WS_MODULE_LOGG_COLLECTOR_URL")
-WS_MODULE_LOGG_COLLECTOR_ENDPOINT = os.getenv("WS_MODULE_LOGG_COLLECTOR_ENDPOINT")
+AWS_API_SECRET_KEY_NAME = os.getenv("AWS_API_SECRET_KEY_NAME")
 
 app = FastAPI()
 
@@ -58,7 +57,7 @@ def get_secret():
 
     secret = get_secret_value_response['SecretString']
     secret_data = json.loads(secret)
-    api_key = secret_data.get("apiKey")
+    api_key = secret_data.get(AWS_API_SECRET_KEY_NAME)
 
     return api_key
     
