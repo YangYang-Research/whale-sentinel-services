@@ -133,7 +133,6 @@ async def process_loggcollection(payload: Payload, eventInfo: str, score: float)
         "timestamp": datetime.now().astimezone().isoformat()
     }
     logEntryJSON = json.dumps(logEntry, ensure_ascii=False).replace('"', '\\"')
-    print(logEntryJSON)
     logger.info(logEntryJSON)
         
 @app.get("/api/v1/ws/services/web-attack-detection/ping")
