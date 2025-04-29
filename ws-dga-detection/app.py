@@ -16,16 +16,21 @@ from concurrent.futures import ThreadPoolExecutor
 import asyncio
 from datetime import datetime
 import json
+import logging
+from wslogger import logger
 
-load_dotenv()
+log = logging.getLogger(__name__)
 
 class Payload(BaseModel):
     payload: str
-    event_id: str
+    event_info: str
     request_created_at: str
 
+load_dotenv()
+
 AWS_REGION = os.getenv("AWS_REGION")
-AWS_API_KEY_NAME = os.getenv("AWS_API_KEY_NAME")
+AWS_SECRET_NAME = os.getenv("AWS_SECRET_NAME")
+AWS_API_SECRET_KEY_NAME = os.getenv("AWS_API_SECRET_KEY_NAME")
 
 app = FastAPI()
 
@@ -40,7 +45,7 @@ def get_secret():
 
     try:
         get_secret_value_response = client.get_secret_value(
-            SecretId=AWS_API_KEY_NAME
+            SecretId=AWS_SECRET_NAME
         )
     except ClientError as e:
         # For a list of exceptions thrown, see
@@ -49,7 +54,7 @@ def get_secret():
 
     secret = get_secret_value_response['SecretString']
     secret_data = json.loads(secret)
-    api_key = secret_data.get("apiKey")
+    api_key = secret_data.get(AWS_API_SECRET_KEY_NAME)
 
     return api_key
 
@@ -75,6 +80,39 @@ def get_decoded_auth(authorization: str) -> str:
     except Exception:
         raise HTTPException(status_code=401, detail={"status": "error", "message": "Unauthorized", "error_code": 401})
 
+def extract_eventInfo(event_info: str):
+    try:
+        agent_id, service_name, event_id = event_info.split("|")
+        return {
+            "agent_id": agent_id,
+            "service_name": service_name,
+            "event_id": event_id,
+        }
+    except ValueError:
+        log.error(f"Invalid event_info format: {event_info}. Expected format: agent_id|service_name|event_id")
+
+async def process_loggcollection(payload: Payload, eventInfo: str, score: float):
+    info = extract_eventInfo(payload.event_info)
+    # Construct log entry
+    logEntry = {
+        "name": "ws-dga-detection",
+        "agent_id": info["agent_id"],
+        "source": str(info["service_name"]).lower(),
+        "destination": "ws-dga-detection",
+        "event_info": eventInfo,
+        "level": "INFO",
+        "event_id": info["event_id"],
+        "type": "SERVICE_EVENT",
+        "raw_request": payload.payload,
+        "prediction": score,
+        "message": "Received request from service",
+        "request_created_at": payload.request_created_at,
+        "request_processed_at": datetime.now().astimezone().isoformat(),
+        "timestamp": datetime.now().astimezone().isoformat()
+    }
+    logger.info(json.dumps(logEntry))
+    
+    
 @app.get("/api/v1/ws/services/dga-detection/ping")
 def ping_info(authorization: str = Header(None)):
     decoded_auth = get_decoded_auth(authorization)
@@ -126,8 +164,11 @@ async def process_detection(payload: Payload, authorization: str):
         prediction = executor.submit(predict).result()
         accuracy = executor.submit(calculate_accuracy, prediction).result()
 
-   # Replace "WS_GATEWAY_SERVICE" with "WS_WEB_ATTACK_DETECTION" in event_id
-    event_id = payload.event_id.replace("WS_GATEWAY_SERVICE", "WS_DGA_DETECTION")
+    # Replace "WS_GATEWAY_SERVICE" with "WS_WEB_ATTACK_DETECTION" in event_id
+    event_info = payload.event_info.replace("WS_GATEWAY_SERVICE", "WS_DGA_DETECTION")
+
+    # Trigger log collection (do not await to keep async non-blocking)
+    asyncio.create_task(process_loggcollection(payload, eventInfo=event_info, score=accuracy))
 
     return JSONResponse(content={
         "status": "success",
@@ -139,7 +180,7 @@ async def process_detection(payload: Payload, authorization: str):
                 "score": accuracy,
             }
         },
-        "event_id": event_id,
+        "event_info": event_info,
         "request_created_at": payload.request_created_at,
         "request_processed_at": datetime.now().astimezone().isoformat()
     })
