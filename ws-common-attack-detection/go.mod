@@ -4,10 +4,14 @@ go 1.24.0
 
 require github.com/aws/aws-sdk-go-v2/config v1.29.14
 
-require gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
+require (
+	github.com/sirupsen/logrus v1.9.3 // indirect
+	golang.org/x/sys v0.32.0 // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
+)
 
 require (
-	github.com/YangYang-Research/whale-sentinel-go-libraries v1.0.5
+	github.com/YangYang-Research/whale-sentinel-go-libraries v1.0.8
 	github.com/aws/aws-sdk-go v1.55.6 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.36.3 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.67 // indirect

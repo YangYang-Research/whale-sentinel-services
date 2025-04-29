@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -17,12 +16,17 @@ import (
 	"github.com/YangYang-Research/whale-sentinel-go-libraries/wshelper"
 	"github.com/YangYang-Research/whale-sentinel-go-libraries/wslogger"
 	"github.com/joho/godotenv"
+	"github.com/sirupsen/logrus"
 )
 
+var log *logrus.Logger
+
+// Load environment variables
 func init() {
-	err := godotenv.Load()
-	if err != nil {
-		fmt.Printf("Error loading .env file: %v\n", err)
+	if err := godotenv.Load(); err != nil {
+		log.WithFields(logrus.Fields{
+			"msg": err,
+		}).Error("Error loading .env file")
 	}
 }
 
@@ -520,7 +524,12 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	log.Println("WS Common Attack Detection is running on port 5003...")
+	// Initialize the application logger
+	log = logrus.New()
+	log.SetFormatter(&logrus.TextFormatter{})
+	log.SetOutput(os.Stdout)
+	log.SetLevel(logrus.DebugLevel)
+	log.Info("WS Common Attack Detection is running on port 5003...")
 	// Initialize the logger
 	logMaxSize, _ := strconv.Atoi(os.Getenv("LOG_MAX_SIZE"))
 	logMaxBackups, _ := strconv.Atoi(os.Getenv("LOG_MAX_BACKUPS"))
