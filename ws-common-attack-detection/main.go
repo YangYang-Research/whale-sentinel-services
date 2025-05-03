@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/YangYang-Research/whale-sentinel-go-libraries/wshelper"
-	"github.com/YangYang-Research/whale-sentinel-go-libraries/wslogger"
+	"github.com/YangYang-Research/whale-sentinel-services/ws-common-attack-detection/wshelper"
+	"github.com/YangYang-Research/whale-sentinel-services/ws-common-attack-detection/wslogger"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 )
@@ -23,6 +23,12 @@ var log *logrus.Logger
 
 // Load environment variables
 func init() {
+	// Initialize the application logger
+	log = logrus.New()
+	log.SetFormatter(&logrus.TextFormatter{})
+	log.SetOutput(os.Stdout)
+	log.SetLevel(logrus.DebugLevel)
+
 	if err := godotenv.Load(); err != nil {
 		log.WithFields(logrus.Fields{
 			"msg": err,
@@ -524,11 +530,6 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	// Initialize the application logger
-	log = logrus.New()
-	log.SetFormatter(&logrus.TextFormatter{})
-	log.SetOutput(os.Stdout)
-	log.SetLevel(logrus.DebugLevel)
 	log.Info("WS Common Attack Detection is running on port 5003...")
 	// Initialize the logger
 	logMaxSize, _ := strconv.Atoi(os.Getenv("LOG_MAX_SIZE"))
