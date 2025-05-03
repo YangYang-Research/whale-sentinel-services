@@ -16,8 +16,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/YangYang-Research/whale-sentinel-go-libraries/wshelper"
-	"github.com/YangYang-Research/whale-sentinel-go-libraries/wslogger"
+	"github.com/YangYang-Research/whale-sentinel-services/ws-gateway-service/wshelper"
+	"github.com/YangYang-Research/whale-sentinel-services/ws-gateway-service/wslogger"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 )
@@ -26,6 +26,12 @@ var log *logrus.Logger
 
 // Load environment variables
 func init() {
+	// Initialize the application logger
+	log = logrus.New()
+	log.SetFormatter(&logrus.TextFormatter{})
+	log.SetOutput(os.Stdout)
+	log.SetLevel(logrus.DebugLevel)
+
 	if err := godotenv.Load(); err != nil {
 		log.WithFields(logrus.Fields{
 			"msg": err,
@@ -591,11 +597,6 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 
 // Main function
 func main() {
-	// Initialize the application logger
-	log = logrus.New()
-	log.SetFormatter(&logrus.TextFormatter{})
-	log.SetOutput(os.Stdout)
-	log.SetLevel(logrus.DebugLevel)
 	log.Info("WS Gateway Service is running on port 5000...")
 	// Initialize the wslogger
 	logMaxSize, _ := strconv.Atoi(os.Getenv("LOG_MAX_SIZE"))
