@@ -8,6 +8,8 @@ WORKDIR /app
 COPY . .
 
 # Install dependencies (if needed)
+WORKDIR /app/ws-common-attack-detection
+
 RUN go mod tidy
 
 # Build the Go application
@@ -31,7 +33,7 @@ RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 COPY --from=builder /app/ws-common-attack-detection /usr/local/bin/
 
 # Copy custom Nginx config to enable HTTPS and proxy to the Go app
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY --from=builder /app/ws-common-attack-detection/nginx.conf /etc/nginx/nginx.conf
 
 # Expose HTTPS port
 EXPOSE 443
