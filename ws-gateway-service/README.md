@@ -2,7 +2,7 @@
 
 # Develop Mode 
 
-`go run main.go`
+`go mod tidy`
 
-# Server Mode 
+`go run main.go`
 
