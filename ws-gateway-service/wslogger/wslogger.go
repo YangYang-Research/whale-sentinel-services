@@ -26,6 +26,7 @@ type (
 	WSGate_LogEntry struct {
 		Name               string `json:"name"`
 		AgentID            string `json:"agent_id"`
+		AgentRuningMode    string `json:"agent_running_mode"`
 		Source             string `json:"source"`
 		Destination        string `json:"destination"`
 		EventInfo          string `json:"event_info"`
@@ -118,6 +119,7 @@ func Log(level string, service_name string, log_data map[string]interface{}) {
 		entry := WSGate_LogEntry{
 			Name:               service_name,
 			AgentID:            log_data["agent_id"].(string),
+			AgentRuningMode:    log_data["agent_running_mode"].(string),
 			Source:             log_data["source"].(string),
 			Destination:        log_data["destination"].(string),
 			EventInfo:          log_data["event_info"].(string),
