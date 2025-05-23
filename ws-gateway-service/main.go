@@ -105,13 +105,13 @@ type (
 		Referer       string `json:"referer"`
 	}
 
-	ACRequestBody struct {
+	APRequestBody struct {
 		AgentID          string `json:"agent_id"`
 		RequestCreatedAt string `json:"request_created_at"`
 	}
 
-	AgentConfigurationRaw struct {
-		Rules map[string]interface{} `json:"rules"`
+	AgentProfileRaw struct {
+		Profile map[string]interface{} `json:"profile"`
 	}
 
 	GWResponseBody struct {
@@ -129,16 +129,16 @@ type (
 		CommonAttackDetection   map[string]bool `json:"ws_module_common_attack_detection"`
 	}
 
-	ACResponseBody struct {
-		Status             string              `json:"status"`
-		Message            string              `json:"message"`
-		Configurations     AgentConfigurations `json:"configurations"`
-		EventInfo          string              `json:"event_info"`
-		RequestCreatedAt   string              `json:"request_created_at"`
-		RequestProcessedAt string              `json:"request_processed_at"`
+	APResponseBody struct {
+		Status             string       `json:"status"`
+		Message            string       `json:"message"`
+		Profile            AgentProfile `json:"profile"`
+		EventInfo          string       `json:"event_info"`
+		RequestCreatedAt   string       `json:"request_created_at"`
+		RequestProcessedAt string       `json:"request_processed_at"`
 	}
 
-	AgentConfigurations struct {
+	AgentProfile struct {
 		RunningMode                   string                      `json:"running_mode"`
 		LastRunMode                   string                      `json:"last_run_mode"`
 		LiteModeDataIsSynchronized    bool                        `json:"lite_mode_data_is_synchronized"`
@@ -215,24 +215,24 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 
 	eventInfo, eventID := generateGWEventInfo(req)
 
-	agentConfiguration, err := processAgentConfiguration(req.AgentID)
+	agentProfile, err := processAgentProfile(req.AgentID)
 	if err != nil {
 		log.WithFields(logrus.Fields{
 			"msg": err,
-		}).Error("Error processing Agent Configuration")
+		}).Error("Error processing Agent Profile")
 	}
 
-	var agentConfig AgentConfigurationRaw
+	var agent AgentProfileRaw
 
-	err = json.Unmarshal([]byte(agentConfiguration), &agentConfig)
+	err = json.Unmarshal([]byte(agentProfile), &agent)
 	if err != nil {
 		log.WithField("msg", err).Error("Failed to parse agent configuration from Redis")
 		return
 	}
 
-	wad := agentConfig.Rules["ws_module_web_attack_detection"].(map[string]interface{})
-	dgad := agentConfig.Rules["ws_module_dga_detection"].(map[string]interface{})
-	cad := agentConfig.Rules["ws_module_common_attack_detection"].(map[string]interface{})
+	wad := agent.Profile["ws_module_web_attack_detection"].(map[string]interface{})
+	dgad := agent.Profile["ws_module_dga_detection"].(map[string]interface{})
+	cad := agent.Profile["ws_module_common_attack_detection"].(map[string]interface{})
 
 	var (
 		webAttackDetectionScore                                          float64
@@ -291,7 +291,7 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 		}).Error("Error processing DGA Detection")
 	}
 
-	if agentConfig.Rules["running_mode"].(string) == "monitor" || agentConfig.Rules["running_mode"].(string) == "lite" {
+	if agent.Profile["running_mode"].(string) == "monitor" || agent.Profile["running_mode"].(string) == "lite" {
 		response := GWResponseBody{
 			Status:             "success",
 			Message:            "Request processed successfully",
@@ -305,7 +305,7 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 	}
 
-	if agentConfig.Rules["running_mode"].(string) == "protection" {
+	if agent.Profile["running_mode"].(string) == "protection" {
 		mapData := GWResponseData{
 			WebAttackDetectionScore: webAttackDetectionScore,
 			DGADetectionScore:       DGADetectionScore,
@@ -336,7 +336,7 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 		logData := map[string]interface{}{
 			"name":                 "ws-gateway-service",
 			"agent_id":             agentID,
-			"agent_running_mode":   agentConfig.Rules["running_mode"].(string),
+			"agent_running_mode":   agent.Profile["running_mode"].(string),
 			"source":               agentID,
 			"destination":          "ws-gateway-service",
 			"event_info":           eventInfo,
@@ -353,14 +353,14 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 	}(req.AgentID, eventInfo, (req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body))
 }
 
-// HandleAgentConfiguration processes incoming requests for agent rules
-func HandleAgentConfiguration(w http.ResponseWriter, r *http.Request) {
+// HandleAgentProfile processes incoming requests for agent profile
+func HandleAgentProfile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		sendErrorResponse(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var req ACRequestBody
+	var req APRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		sendErrorResponse(w, "Invalid request payload", http.StatusBadRequest)
 		return
@@ -373,30 +373,30 @@ func HandleAgentConfiguration(w http.ResponseWriter, r *http.Request) {
 
 	eventInfo, eventID := generateACEventInfo(req)
 
-	agentConfiguration, err := processAgentConfiguration(req.AgentID)
+	agentProfile, err := processAgentProfile(req.AgentID)
 	if err != nil {
 		log.WithFields(logrus.Fields{
 			"msg": err,
 		}).Error("Error processing Agent Configuration")
 	}
 
-	var agentConfig AgentConfigurationRaw
+	var agent AgentProfileRaw
 
-	err = json.Unmarshal([]byte(agentConfiguration), &agentConfig)
+	err = json.Unmarshal([]byte(agentProfile), &agent)
 	if err != nil {
 		log.WithField("msg", err).Error("Failed to parse agent configuration from Redis")
 		return
 	}
 
-	wad := agentConfig.Rules["ws_module_web_attack_detection"].(map[string]interface{})
-	dgad := agentConfig.Rules["ws_module_dga_detection"].(map[string]interface{})
-	cad := agentConfig.Rules["ws_module_common_attack_detection"].(map[string]interface{})
+	wad := agent.Profile["ws_module_web_attack_detection"].(map[string]interface{})
+	dgad := agent.Profile["ws_module_dga_detection"].(map[string]interface{})
+	cad := agent.Profile["ws_module_common_attack_detection"].(map[string]interface{})
 
-	mapData := AgentConfigurations{
-		RunningMode:                   agentConfig.Rules["running_mode"].(string),
-		LastRunMode:                   agentConfig.Rules["last_run_mode"].(string),
-		LiteModeDataIsSynchronized:    agentConfig.Rules["lite_mode_data_is_synchronized"].(bool),
-		LiteModeDataSynchronizeStatus: agentConfig.Rules["lite_mode_data_synchronize_status"].(string),
+	mapData := AgentProfile{
+		RunningMode:                   agent.Profile["running_mode"].(string),
+		LastRunMode:                   agent.Profile["last_run_mode"].(string),
+		LiteModeDataIsSynchronized:    agent.Profile["lite_mode_data_is_synchronized"].(bool),
+		LiteModeDataSynchronizeStatus: agent.Profile["lite_mode_data_synchronize_status"].(string),
 		WebAttackDetection: WebAttackDetectionConfig{
 			Enable:       wad["enable"].(bool),
 			DetectHeader: wad["detect_header"].(bool),
@@ -413,10 +413,10 @@ func HandleAgentConfiguration(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	response := ACResponseBody{
+	response := APResponseBody{
 		Status:             "success",
 		Message:            "Request processed successfully",
-		Configurations:     mapData,
+		Profile:            mapData,
 		EventInfo:          eventInfo,
 		RequestCreatedAt:   req.RequestCreatedAt,
 		RequestProcessedAt: time.Now().Format(time.RFC3339),
@@ -431,7 +431,7 @@ func HandleAgentConfiguration(w http.ResponseWriter, r *http.Request) {
 		logData := map[string]interface{}{
 			"name":                 "ws-gateway-service",
 			"agent_id":             agentID,
-			"agent_running_mode":   agentConfig.Rules["running_mode"].(string),
+			"agent_running_mode":   agent.Profile["running_mode"].(string),
 			"source":               agentID,
 			"destination":          "ws-gateway-service",
 			"event_info":           eventInfo,
@@ -464,7 +464,7 @@ func validateGWRequest(req GWRequestBody) error {
 	return nil
 }
 
-func validateACRequest(req ACRequestBody) error {
+func validateACRequest(req APRequestBody) error {
 	if req.AgentID == "" {
 		return fmt.Errorf("missing required fields")
 	}
@@ -486,7 +486,7 @@ func generateGWEventInfo(req GWRequestBody) (string, string) {
 	return eventInfo, hex.EncodeToString(eventID[:])
 }
 
-func generateACEventInfo(req ACRequestBody) (string, string) {
+func generateACEventInfo(req APRequestBody) (string, string) {
 	hashInput := req.RequestCreatedAt + req.AgentID
 	eventID := sha256.Sum256([]byte(hashInput))
 	eventInfo := req.AgentID + "|" + "WS_GATEWAY_SERVICE" + "|" + hex.EncodeToString(eventID[:])
@@ -747,9 +747,8 @@ func processDGADetection(req GWRequestBody, eventInfo string, dgad map[string]in
 	return score, nil
 }
 
-func processAgentConfiguration(agentId string) (string, error) {
-	fmt.Println("Agent ID:", agentId)
-	agentConfiguration, err := handlerRedis(agentId, "")
+func processAgentProfile(agentId string) (string, error) {
+	agentProfile, err := handlerRedis(agentId, "")
 	if err != nil {
 		log.WithFields(logrus.Fields{
 			"msg": err,
@@ -757,13 +756,13 @@ func processAgentConfiguration(agentId string) (string, error) {
 	}
 
 	// 2. If not found in cache or failed to parse → call ws-configuration
-	if agentConfiguration == "" {
+	if agentProfile == "" {
 
 	}
 
 	// // 3. Store result into Redis
 
-	return agentConfiguration, nil
+	return agentProfile, nil
 
 }
 
@@ -834,10 +833,10 @@ func main() {
 	wslogger.SetupWSLogger("ws-gateway-service", logMaxSize, logMaxBackups, logMaxAge, logCompression)
 	// Wrap the handler with a 30-second timeout
 	timeoutHandlerGW := http.TimeoutHandler(apiKeyAuthMiddleware(http.HandlerFunc(handleGateway)), 30*time.Second, "Request timed out")
-	timeOutHandlerAC := http.TimeoutHandler(apiKeyAuthMiddleware(http.HandlerFunc(HandleAgentConfiguration)), 30*time.Second, "Request timed out")
+	timeOutHandlerAP := http.TimeoutHandler(apiKeyAuthMiddleware(http.HandlerFunc(HandleAgentProfile)), 30*time.Second, "Request timed out")
 
 	// Register the timeout handler
 	http.Handle("/api/v1/ws/services/gateway", timeoutHandlerGW)
-	http.Handle("/api/v1/ws/services/gateway/agent-configuration", timeOutHandlerAC)
+	http.Handle("/api/v1/ws/services/gateway/agent-profile", timeOutHandlerAP)
 	log.Fatal(http.ListenAndServe(":5000", nil))
 }
