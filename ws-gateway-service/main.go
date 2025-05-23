@@ -450,7 +450,7 @@ func HandleAgentConfiguration(w http.ResponseWriter, r *http.Request) {
 
 // Helper functions
 func validateGWRequest(req GWRequestBody) error {
-	if req.Payload.Data.ClientInformation.IP == "" || req.Payload.Data.ClientInformation.DeviceType == "" || req.Payload.Data.ClientInformation.NetworkType == "" || req.Payload.Data.HTTPRequest.Method == "" || req.Payload.Data.HTTPRequest.URL == "" || req.Payload.Data.HTTPRequest.Headers.UserAgent == "" || req.Payload.Data.HTTPRequest.Headers.ContentType == "" {
+	if req.Payload.Data.ClientInformation.IP == "" || req.Payload.Data.HTTPRequest.Method == "" || req.Payload.Data.HTTPRequest.URL == "" || req.Payload.Data.HTTPRequest.Headers.UserAgent == "" || req.Payload.Data.HTTPRequest.Headers.ContentType == "" {
 		return fmt.Errorf("missing required fields")
 	}
 
@@ -813,7 +813,7 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		expectedAuthValue := fmt.Sprintf("ws:%s", apiKey)
+		expectedAuthValue := fmt.Sprintf("ws-agent:%s", apiKey)
 		if string(decodedAuthHeader) != expectedAuthValue {
 			sendErrorResponse(w, "Unauthorized", http.StatusUnauthorized)
 			return
