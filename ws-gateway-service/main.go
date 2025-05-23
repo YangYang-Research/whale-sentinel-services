@@ -146,6 +146,7 @@ type (
 		WebAttackDetection            WebAttackDetectionConfig    `json:"ws_module_web_attack_detection"`
 		DGADetection                  DGADetectionConfig          `json:"ws_module_dga_detection"`
 		CommonAttackDetection         CommonAttackDetectionConfig `json:"ws_module_common_attack_detection"`
+		SecureResponseHeaders         SecureResponseHeaderConfig  `json:"secure_response_headers"`
 	}
 
 	WebAttackDetectionConfig struct {
@@ -163,6 +164,11 @@ type (
 		DetectSqlInjection       bool `json:"detect_sql_injection"`
 		DetectHTTPVerbTampering  bool `json:"detect_http_verb_tampering"`
 		DetectHTTPLargeRequest   bool `json:"detect_http_large_request"`
+	}
+
+	SecureResponseHeaderConfig struct {
+		Enable        bool                   `json:"enable"`
+		SecureHeaders map[string]interface{} `json:"headers"`
 	}
 
 	ErrorResponse struct {
@@ -391,6 +397,7 @@ func HandleAgentProfile(w http.ResponseWriter, r *http.Request) {
 	wad := agent.Profile["ws_module_web_attack_detection"].(map[string]interface{})
 	dgad := agent.Profile["ws_module_dga_detection"].(map[string]interface{})
 	cad := agent.Profile["ws_module_common_attack_detection"].(map[string]interface{})
+	srh := agent.Profile["secure_response_headers"].(map[string]interface{})
 
 	mapData := AgentProfile{
 		RunningMode:                   agent.Profile["running_mode"].(string),
@@ -410,6 +417,10 @@ func HandleAgentProfile(w http.ResponseWriter, r *http.Request) {
 			DetectSqlInjection:       cad["detect_sql_injection"].(bool),
 			DetectHTTPVerbTampering:  cad["detect_http_verb_tampering"].(bool),
 			DetectHTTPLargeRequest:   cad["detect_http_large_request"].(bool),
+		},
+		SecureResponseHeaders: SecureResponseHeaderConfig{
+			Enable:        srh["enable"].(bool),
+			SecureHeaders: srh["headers"].(map[string]interface{}),
 		},
 	}
 
