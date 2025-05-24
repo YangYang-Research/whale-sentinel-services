@@ -152,10 +152,12 @@ type (
 	WebAttackDetectionConfig struct {
 		Enable       bool `json:"enable"`
 		DetectHeader bool `json:"detect_header"`
+		Threshold    int  `json:"threshold"`
 	}
 
 	DGADetectionConfig struct {
-		Enable bool `json:"enable"`
+		Enable    bool `json:"enable"`
+		Threshold int  `json:"threshold"`
 	}
 
 	CommonAttackDetectionConfig struct {
@@ -407,9 +409,11 @@ func HandleAgentProfile(w http.ResponseWriter, r *http.Request) {
 		WebAttackDetection: WebAttackDetectionConfig{
 			Enable:       wad["enable"].(bool),
 			DetectHeader: wad["detect_header"].(bool),
+			Threshold:    int(wad["threshold"].(float64)),
 		},
 		DGADetection: DGADetectionConfig{
-			Enable: dgad["enable"].(bool),
+			Enable:    dgad["enable"].(bool),
+			Threshold: int(dgad["threshold"].(float64)),
 		},
 		CommonAttackDetection: CommonAttackDetectionConfig{
 			Enable:                   cad["enable"].(bool),
