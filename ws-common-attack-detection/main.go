@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/YangYang-Research/whale-sentinel-services/ws-common-attack-detection/wshelper"
-	"github.com/YangYang-Research/whale-sentinel-services/ws-common-attack-detection/wslogger"
+	"github.com/YangYang-Research/whale-sentinel-services/ws-common-attack-detection/helper"
+	"github.com/YangYang-Research/whale-sentinel-services/ws-common-attack-detection/logger"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 )
@@ -365,7 +365,7 @@ func getAPIKey() (string, error) {
 	awsSecretName := os.Getenv("AWS_SECRET_NAME")
 	awsAPISecretKeyName := os.Getenv("AWS_API_SECRET_KEY_NAME")
 
-	awsAPIKeyVaule, err := wshelper.GetAWSSecret(awsRegion, awsSecretName, awsAPISecretKeyName)
+	awsAPIKeyVaule, err := helper.GetAWSSecret(awsRegion, awsSecretName, awsAPISecretKeyName)
 
 	return awsAPIKeyVaule, err
 }
@@ -525,7 +525,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 			"timestamp":            time.Now().Format(time.RFC3339),
 		}
 
-		wslogger.Log("info", "ws-common-attack-detection", logData)
+		logger.Log("info", "ws-common-attack-detection", logData)
 	}(agentID, eventInfo, (req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body))
 }
 
@@ -536,7 +536,7 @@ func main() {
 	logMaxBackups, _ := strconv.Atoi(os.Getenv("LOG_MAX_BACKUPS"))
 	logMaxAge, _ := strconv.Atoi(os.Getenv("LOG_MAX_AGE"))
 	logCompression, _ := strconv.ParseBool(os.Getenv("LOG_COMPRESSION"))
-	wslogger.SetupWSLogger("ws-common-attack-detection", logMaxSize, logMaxBackups, logMaxAge, logCompression)
+	logger.SetupWSLogger("ws-common-attack-detection", logMaxSize, logMaxBackups, logMaxAge, logCompression)
 
 	// Wrap the handler with a 30-second timeout
 	timeoutHandler := http.TimeoutHandler(http.HandlerFunc(handleData), 30*time.Second, "Request timed out")

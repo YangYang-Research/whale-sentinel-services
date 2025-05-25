@@ -1,4 +1,4 @@
-package wslogger
+package logger
 
 import (
 	"encoding/json"
@@ -23,21 +23,29 @@ type (
 		Timestamp string `json:"timestamp"`
 	}
 
-	WSGate_LogEntry struct {
-		Name               string `json:"name"`
-		AgentID            string `json:"agent_id"`
-		AgentRuningMode    string `json:"agent_running_mode"`
-		Source             string `json:"source"`
-		Destination        string `json:"destination"`
-		EventInfo          string `json:"event_info"`
-		Level              string `json:"level"`
-		EventID            string `json:"event_id"`
-		Type               string `json:"type"`
-		RequestCreatedAt   int64  `json:"request_created_at"`
-		RequestProcessedAt int64  `json:"request_processed_at"`
-		Title              string `json:"title"`
-		RawRequest         string `json:"raw_request"`
-		Timestamp          string `json:"timestamp"`
+	WSCommonAttack_LogEntry struct {
+		Name                  string                    `json:"name"`
+		AgentID               string                    `json:"agent_id"`
+		Source                string                    `json:"source"`
+		Destination           string                    `json:"destination"`
+		EventInfo             string                    `json:"event_info"`
+		Level                 string                    `json:"level"`
+		EventID               string                    `json:"event_id"`
+		Type                  string                    `json:"type"`
+		CommonAttackDetection CommonAttackDetectionRule `json:"common_attack_detection"`
+		RequestCreatedAt      int64                     `json:"request_created_at"`
+		RequestProcessedAt    int64                     `json:"request_processed_at"`
+		Title                 string                    `json:"title"`
+		RawRequest            string                    `json:"raw_request"`
+		Timestamp             string                    `json:"timestamp"`
+	}
+
+	CommonAttackDetectionRule struct {
+		CrossSiteScripting bool `json:"cross_site_scripting"`
+		LargeRequest       bool `json:"large_request"`
+		SqlInjection       bool `json:"sql_injection"`
+		HTTPVerbTampering  bool `json:"http_verb_tampering"`
+		HTTPLargeRequest   bool `json:"http_large_request"`
 	}
 )
 
@@ -115,17 +123,28 @@ func Log(level string, service_name string, log_data map[string]interface{}) {
 	var err error
 
 	switch service_name {
-	case "ws-gateway-service":
-		entry := WSGate_LogEntry{
-			Name:               service_name,
-			AgentID:            log_data["agent_id"].(string),
-			AgentRuningMode:    log_data["agent_running_mode"].(string),
-			Source:             log_data["source"].(string),
-			Destination:        log_data["destination"].(string),
-			EventInfo:          log_data["event_info"].(string),
-			Level:              strings.ToUpper(level),
-			EventID:            log_data["event_id"].(string),
-			Type:               log_data["type"].(string),
+	case "ws-common-attack-detection":
+		cadMap, ok := log_data["common_attack_detection"].(map[string]bool)
+		if !ok {
+			log.Println("Warning: missing or invalid common_attack_detection map")
+			return
+		}
+		entry := WSCommonAttack_LogEntry{
+			Name:        service_name,
+			AgentID:     log_data["agent_id"].(string),
+			Source:      log_data["source"].(string),
+			Destination: log_data["destination"].(string),
+			EventInfo:   log_data["event_info"].(string),
+			Level:       strings.ToUpper(level),
+			EventID:     log_data["event_id"].(string),
+			Type:        log_data["type"].(string),
+			CommonAttackDetection: CommonAttackDetectionRule{
+				CrossSiteScripting: cadMap["cross_site_scripting"],
+				LargeRequest:       cadMap["large_request"],
+				SqlInjection:       cadMap["sql_injection"],
+				HTTPVerbTampering:  cadMap["http_verb_tampering"],
+				HTTPLargeRequest:   cadMap["http_large_request"],
+			},
 			RequestCreatedAt:   toUnixTime(log_data["request_created_at"]),
 			RequestProcessedAt: toUnixTime(log_data["request_processed_at"]),
 			Title:              log_data["title"].(string),

@@ -1,4 +1,4 @@
-package wshelper
+package helper
 
 import (
 	"context"

@@ -3,23 +3,21 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
-	"regexp"
 	"strconv"
 	"sync"
 	"time"
 
-	"github.com/YangYang-Research/whale-sentinel-services/ws-gateway-service/wshelper"
-	"github.com/YangYang-Research/whale-sentinel-services/ws-gateway-service/wslogger"
+	"github.com/YangYang-Research/whale-sentinel-services/ws-gateway-service/helper"
+	"github.com/YangYang-Research/whale-sentinel-services/ws-gateway-service/logger"
+	"github.com/YangYang-Research/whale-sentinel-services/ws-gateway-service/shared"
+	"github.com/YangYang-Research/whale-sentinel-services/ws-gateway-service/validation"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
@@ -63,123 +61,6 @@ func init() {
 	}
 }
 
-// Structs for request and response
-type (
-	GWRequestBody struct {
-		AgentID          string  `json:"agent_id"`
-		Payload          Payload `json:"payload"`
-		RequestCreatedAt string  `json:"request_created_at"`
-	}
-
-	Payload struct {
-		Data Data `json:"data"`
-	}
-
-	Data struct {
-		ClientInformation ClientInformation `json:"client_information"`
-		HTTPRequest       HTTPRequest       `json:"http_request"`
-	}
-
-	ClientInformation struct {
-		IP             string `json:"ip"`
-		DeviceType     string `json:"device_type"`
-		NetworkType    string `json:"network_type"`
-		Platform       string `json:"platform"`
-		Browser        string `json:"browser"`
-		BrowserVersion string `json:"browser_version"`
-	}
-
-	HTTPRequest struct {
-		Method      string            `json:"method"`
-		URL         string            `json:"url"`
-		Host        string            `json:"host"`
-		Headers     HTTPRequestHeader `json:"headers"`
-		QueryParams string            `json:"query_parameters"`
-		Body        string            `json:"body"`
-	}
-
-	HTTPRequestHeader struct {
-		UserAgent     string `json:"user-agent"`
-		ContentType   string `json:"content-type"`
-		ContentLength int    `json:"content-length"`
-		Referer       string `json:"referer"`
-	}
-
-	APRequestBody struct {
-		AgentID          string `json:"agent_id"`
-		RequestCreatedAt string `json:"request_created_at"`
-	}
-
-	AgentProfileRaw struct {
-		Profile map[string]interface{} `json:"profile"`
-	}
-
-	GWResponseBody struct {
-		Status             string         `json:"status"`
-		Message            string         `json:"message"`
-		Data               GWResponseData `json:"data"`
-		EventInfo          string         `json:"event_info"`
-		RequestCreatedAt   string         `json:"request_created_at"`
-		RequestProcessedAt string         `json:"request_processed_at"`
-	}
-
-	GWResponseData struct {
-		WebAttackDetectionScore float64         `json:"ws_module_web_attack_detection_score"`
-		DGADetectionScore       float64         `json:"ws_module_dga_detection_score"`
-		CommonAttackDetection   map[string]bool `json:"ws_module_common_attack_detection"`
-	}
-
-	APResponseBody struct {
-		Status             string       `json:"status"`
-		Message            string       `json:"message"`
-		Profile            AgentProfile `json:"profile"`
-		EventInfo          string       `json:"event_info"`
-		RequestCreatedAt   string       `json:"request_created_at"`
-		RequestProcessedAt string       `json:"request_processed_at"`
-	}
-
-	AgentProfile struct {
-		RunningMode                   string                      `json:"running_mode"`
-		LastRunMode                   string                      `json:"last_run_mode"`
-		LiteModeDataIsSynchronized    bool                        `json:"lite_mode_data_is_synchronized"`
-		LiteModeDataSynchronizeStatus string                      `json:"lite_mode_data_synchronize_status"`
-		WebAttackDetection            WebAttackDetectionConfig    `json:"ws_module_web_attack_detection"`
-		DGADetection                  DGADetectionConfig          `json:"ws_module_dga_detection"`
-		CommonAttackDetection         CommonAttackDetectionConfig `json:"ws_module_common_attack_detection"`
-		SecureResponseHeaders         SecureResponseHeaderConfig  `json:"secure_response_headers"`
-	}
-
-	WebAttackDetectionConfig struct {
-		Enable       bool `json:"enable"`
-		DetectHeader bool `json:"detect_header"`
-		Threshold    int  `json:"threshold"`
-	}
-
-	DGADetectionConfig struct {
-		Enable    bool `json:"enable"`
-		Threshold int  `json:"threshold"`
-	}
-
-	CommonAttackDetectionConfig struct {
-		Enable                   bool `json:"enable"`
-		DetectCrossSiteScripting bool `json:"detect_cross_site_scripting"`
-		DetectSqlInjection       bool `json:"detect_sql_injection"`
-		DetectHTTPVerbTampering  bool `json:"detect_http_verb_tampering"`
-		DetectHTTPLargeRequest   bool `json:"detect_http_large_request"`
-	}
-
-	SecureResponseHeaderConfig struct {
-		Enable        bool                   `json:"enable"`
-		SecureHeaders map[string]interface{} `json:"headers"`
-	}
-
-	ErrorResponse struct {
-		Status    string `json:"status"`
-		Message   string `json:"message"`
-		ErrorCode int    `json:"error_code"`
-	}
-)
-
 // handlerRedis set and get value from Redis
 func handlerRedis(key string, value string) (string, error) {
 	if value == "" {
@@ -206,31 +87,31 @@ func handlerRedis(key string, value string) (string, error) {
 // handleGateway processes incoming requests
 func handleGateway(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		sendErrorResponse(w, "Invalid request method", http.StatusMethodNotAllowed)
+		helper.SendErrorResponse(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var req GWRequestBody
+	var req shared.GWRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		sendErrorResponse(w, "Invalid request payload", http.StatusBadRequest)
+		helper.SendErrorResponse(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
-	if err := validateGWRequest(req); err != nil {
-		sendErrorResponse(w, err.Error(), http.StatusBadRequest)
+	if err := validation.ValidateGWRequest(req); err != nil {
+		helper.SendErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	eventInfo, eventID := generateGWEventInfo(req)
+	eventInfo, eventID := helper.GenerateGWEventInfo(req)
 
-	agentProfile, err := processAgentProfile(req.AgentID)
+	agentProfile, err := processAgentProfile(req.AgentID, "")
 	if err != nil {
 		log.WithFields(logrus.Fields{
 			"msg": err,
 		}).Error("Error processing Agent Profile")
 	}
 
-	var agent AgentProfileRaw
+	var agent shared.AgentProfileRaw
 
 	err = json.Unmarshal([]byte(agentProfile), &agent)
 	if err != nil {
@@ -299,44 +180,28 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 		}).Error("Error processing DGA Detection")
 	}
 
-	if agent.Profile["running_mode"].(string) == "monitor" || agent.Profile["running_mode"].(string) == "lite" {
-		response := GWResponseBody{
-			Status:             "success",
-			Message:            "Request processed successfully",
-			Data:               GWResponseData{},
-			EventInfo:          eventInfo,
-			RequestCreatedAt:   req.RequestCreatedAt,
-			RequestProcessedAt: time.Now().Format(time.RFC3339),
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+	mapData := shared.GWResponseData{
+		WebAttackDetectionScore: webAttackDetectionScore,
+		DGADetectionScore:       DGADetectionScore,
+		CommonAttackDetection: map[string]bool{
+			"cross_site_scripting_detection": crossSiteScriptingDetection,
+			"sql_injection_detection":        sqlInjectionDetection,
+			"http_verb_tampering_detection":  httpVerbTamperingDetection,
+			"http_large_request_detection":   httpLargeRequestDetection,
+		},
 	}
 
-	if agent.Profile["running_mode"].(string) == "protection" {
-		mapData := GWResponseData{
-			WebAttackDetectionScore: webAttackDetectionScore,
-			DGADetectionScore:       DGADetectionScore,
-			CommonAttackDetection: map[string]bool{
-				"cross_site_scripting_detection": crossSiteScriptingDetection,
-				"sql_injection_detection":        sqlInjectionDetection,
-				"http_verb_tampering_detection":  httpVerbTamperingDetection,
-				"http_large_request_detection":   httpLargeRequestDetection,
-			},
-		}
-
-		response := GWResponseBody{
-			Status:             "success",
-			Message:            "Request processed successfully",
-			Data:               mapData,
-			EventInfo:          eventInfo,
-			RequestCreatedAt:   req.RequestCreatedAt,
-			RequestProcessedAt: time.Now().Format(time.RFC3339),
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+	response := shared.GWResponseBody{
+		Status:             "success",
+		Message:            "Request processed successfully",
+		Data:               mapData,
+		EventInfo:          eventInfo,
+		RequestCreatedAt:   req.RequestCreatedAt,
+		RequestProcessedAt: time.Now().Format(time.RFC3339),
 	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 
 	// Log the request to the logg collector
 	go func(agentID string, eventInfo string, rawRequest string) {
@@ -357,38 +222,38 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 			"timestamp":            time.Now().Format(time.RFC3339),
 		}
 
-		wslogger.Log("INFO", "ws-gateway-service", logData)
-	}(req.AgentID, eventInfo, (req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body))
+		logger.Log("INFO", "ws-gateway-service", logData)
+	}(req.AgentID, eventInfo, (req.GWPayload.GWData.HTTPRequest.QueryParams + req.GWPayload.GWData.HTTPRequest.Body))
 }
 
 // HandleAgentProfile processes incoming requests for agent profile
 func HandleAgentProfile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		sendErrorResponse(w, "Invalid request method", http.StatusMethodNotAllowed)
+		helper.SendErrorResponse(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var req APRequestBody
+	var req shared.APRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		sendErrorResponse(w, "Invalid request payload", http.StatusBadRequest)
+		helper.SendErrorResponse(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
-	if err := validateACRequest(req); err != nil {
-		sendErrorResponse(w, err.Error(), http.StatusBadRequest)
+	if err := validation.ValidateACRequest(req); err != nil {
+		helper.SendErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	eventInfo, eventID := generateACEventInfo(req)
+	eventInfo, eventID := helper.GenerateACEventInfo(req)
 
-	agentProfile, err := processAgentProfile(req.AgentID)
+	agentProfile, err := processAgentProfile(req.AgentID, "")
 	if err != nil {
 		log.WithFields(logrus.Fields{
 			"msg": err,
 		}).Error("Error processing Agent Configuration")
 	}
 
-	var agent AgentProfileRaw
+	var agent shared.AgentProfileRaw
 
 	err = json.Unmarshal([]byte(agentProfile), &agent)
 	if err != nil {
@@ -401,34 +266,34 @@ func HandleAgentProfile(w http.ResponseWriter, r *http.Request) {
 	cad := agent.Profile["ws_module_common_attack_detection"].(map[string]interface{})
 	srh := agent.Profile["secure_response_headers"].(map[string]interface{})
 
-	mapData := AgentProfile{
+	mapData := shared.AgentProfile{
 		RunningMode:                   agent.Profile["running_mode"].(string),
 		LastRunMode:                   agent.Profile["last_run_mode"].(string),
 		LiteModeDataIsSynchronized:    agent.Profile["lite_mode_data_is_synchronized"].(bool),
 		LiteModeDataSynchronizeStatus: agent.Profile["lite_mode_data_synchronize_status"].(string),
-		WebAttackDetection: WebAttackDetectionConfig{
+		WebAttackDetection: shared.WebAttackDetectionConfig{
 			Enable:       wad["enable"].(bool),
 			DetectHeader: wad["detect_header"].(bool),
 			Threshold:    int(wad["threshold"].(float64)),
 		},
-		DGADetection: DGADetectionConfig{
+		DGADetection: shared.DGADetectionConfig{
 			Enable:    dgad["enable"].(bool),
 			Threshold: int(dgad["threshold"].(float64)),
 		},
-		CommonAttackDetection: CommonAttackDetectionConfig{
+		CommonAttackDetection: shared.CommonAttackDetectionConfig{
 			Enable:                   cad["enable"].(bool),
 			DetectCrossSiteScripting: cad["detect_cross_site_scripting"].(bool),
 			DetectSqlInjection:       cad["detect_sql_injection"].(bool),
 			DetectHTTPVerbTampering:  cad["detect_http_verb_tampering"].(bool),
 			DetectHTTPLargeRequest:   cad["detect_http_large_request"].(bool),
 		},
-		SecureResponseHeaders: SecureResponseHeaderConfig{
+		SecureResponseHeaders: shared.SecureResponseHeaderConfig{
 			Enable:        srh["enable"].(bool),
 			SecureHeaders: srh["headers"].(map[string]interface{}),
 		},
 	}
 
-	response := APResponseBody{
+	response := shared.APResponseBody{
 		Status:             "success",
 		Message:            "Request processed successfully",
 		Profile:            mapData,
@@ -459,53 +324,95 @@ func HandleAgentProfile(w http.ResponseWriter, r *http.Request) {
 			"timestamp":            time.Now().Format(time.RFC3339),
 		}
 
-		wslogger.Log("INFO", "ws-gateway-service", logData)
+		logger.Log("INFO", "ws-gateway-service", logData)
 	}(req.AgentID, eventInfo, (req.AgentID))
 }
 
-// Helper functions
-func validateGWRequest(req GWRequestBody) error {
-	if req.Payload.Data.ClientInformation.IP == "" || req.Payload.Data.HTTPRequest.Method == "" || req.Payload.Data.HTTPRequest.URL == "" || req.Payload.Data.HTTPRequest.Headers.UserAgent == "" || req.Payload.Data.HTTPRequest.Headers.ContentType == "" {
-		return fmt.Errorf("missing required fields")
+// HandleAgentSynchronize processes incoming requests for agent synchronization
+func HandleAgentSynchronize(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		helper.SendErrorResponse(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
 	}
 
-	if matched, _ := regexp.MatchString(`^ws_agent_.*`, req.AgentID); !matched {
-		return fmt.Errorf("invalid AgentID format")
+	var req shared.ASRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		helper.SendErrorResponse(w, "Invalid request payload", http.StatusBadRequest)
+		return
 	}
 
-	if _, err := time.Parse(time.RFC3339, req.RequestCreatedAt); err != nil {
-		return fmt.Errorf("invalid timestamp format")
-	}
-	return nil
-}
-
-func validateACRequest(req APRequestBody) error {
-	if req.AgentID == "" {
-		return fmt.Errorf("missing required fields")
+	if err := validation.ValidateASRequest(req); err != nil {
+		helper.SendErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
-	if matched, _ := regexp.MatchString(`^ws_agent_.*`, req.AgentID); !matched {
-		return fmt.Errorf("invalid AgentID format")
+	eventInfo, eventID := helper.GenerateASEventInfo(req)
+
+	agentProfileStr, err := processAgentProfile(req.AgentID, "")
+	if err != nil {
+		log.WithFields(logrus.Fields{
+			"msg": err,
+		}).Error("Error processing Agent Configuration")
 	}
 
-	if _, err := time.Parse(time.RFC3339, req.RequestCreatedAt); err != nil {
-		return fmt.Errorf("invalid timestamp format")
+	var agentProfile map[string]map[string]interface{}
+	json.Unmarshal([]byte(agentProfileStr), &agentProfile)
+
+	requestPayload := req.ASPayload
+	profile := agentProfile["profile"]
+
+	for k, v := range requestPayload {
+		if _, exists := profile[k]; exists {
+			profile[k] = v
+		}
 	}
-	return nil
-}
 
-func generateGWEventInfo(req GWRequestBody) (string, string) {
-	hashInput := req.RequestCreatedAt + req.Payload.Data.ClientInformation.IP + req.Payload.Data.ClientInformation.DeviceType + req.Payload.Data.HTTPRequest.Method + req.Payload.Data.HTTPRequest.Host + req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
-	eventID := sha256.Sum256([]byte(hashInput))
-	eventInfo := req.AgentID + "|" + "WS_GATEWAY_SERVICE" + "|" + hex.EncodeToString(eventID[:])
-	return eventInfo, hex.EncodeToString(eventID[:])
-}
+	updatedJson, err := json.Marshal(agentProfile)
+	if err != nil {
+		log.WithFields(logrus.Fields{
+			"msg": err,
+		}).Error("Error marshalling updated agent profile")
+	}
 
-func generateACEventInfo(req APRequestBody) (string, string) {
-	hashInput := req.RequestCreatedAt + req.AgentID
-	eventID := sha256.Sum256([]byte(hashInput))
-	eventInfo := req.AgentID + "|" + "WS_GATEWAY_SERVICE" + "|" + hex.EncodeToString(eventID[:])
-	return eventInfo, hex.EncodeToString(eventID[:])
+	updateProfifle, err := processAgentProfile(req.AgentID, string(updatedJson))
+	if err != nil {
+		log.WithFields(logrus.Fields{
+			"msg": err,
+		}).Error("Error updating Agent Profile")
+	}
+
+	response := shared.ASResponseBody{
+		Status:           "success",
+		Message:          "Request processed successfully",
+		Profile:          updateProfifle,
+		EventInfo:        eventInfo,
+		RequestCreatedAt: req.RequestCreatedAt,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+
+	// Log the request to the logg collector
+	go func(agentID string, eventInfo string, rawRequest string) {
+		// Log the request to the log collector
+		logData := map[string]interface{}{
+			"name":                 "ws-gateway-service",
+			"agent_id":             agentID,
+			"agent_running_mode":   profile["running_mode"].(string),
+			"source":               agentID,
+			"destination":          "ws-gateway-service",
+			"event_info":           eventInfo,
+			"event_id":             eventID,
+			"type":                 "AGENT_EVENT",
+			"request_created_at":   req.RequestCreatedAt,
+			"request_processed_at": time.Now().Format(time.RFC3339),
+			"title":                "Received request from agent",
+			"raw_request":          rawRequest,
+			"timestamp":            time.Now().Format(time.RFC3339),
+		}
+
+		logger.Log("INFO", "ws-gateway-service", logData)
+	}(req.AgentID, eventInfo, (req.AgentID))
 }
 
 func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
@@ -544,12 +451,12 @@ func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func processWebAttackDetection(req GWRequestBody, eventInfo string, wad map[string]interface{}) (float64, error) {
+func processWebAttackDetection(req shared.GWRequestBody, eventInfo string, wad map[string]interface{}) (float64, error) {
 	log.WithFields(logrus.Fields{
 		"msg": "Event Info: " + eventInfo,
 	}).Debug("Processing Web Attack Detection")
 
-	httpRequest := req.Payload.Data.HTTPRequest
+	httpRequest := req.GWPayload.GWData.HTTPRequest
 	var concatenatedData string
 	if wad["detect_header"].(bool) {
 		concatenatedData = fmt.Sprintf("%s %s \n Host: %s \n User-Agent: %s \n Content-Type: %s \n Content-Length: %d \n\n %s%s",
@@ -621,7 +528,7 @@ func processWebAttackDetection(req GWRequestBody, eventInfo string, wad map[stri
 	return score, nil
 }
 
-func processCommonAttackDetection(req GWRequestBody, eventInfo string, cad map[string]interface{}) (bool, bool, bool, bool, error) {
+func processCommonAttackDetection(req shared.GWRequestBody, eventInfo string, _ map[string]interface{}) (bool, bool, bool, bool, error) {
 	log.WithFields(logrus.Fields{
 		"msg": "Event Info: " + eventInfo,
 	}).Debug("Processing Common Attack Detection")
@@ -632,25 +539,25 @@ func processCommonAttackDetection(req GWRequestBody, eventInfo string, cad map[s
 		"payload": map[string]interface{}{
 			"data": map[string]interface{}{
 				"client_information": map[string]interface{}{
-					"ip":              req.Payload.Data.ClientInformation.IP,
-					"device_type":     req.Payload.Data.ClientInformation.DeviceType,
-					"network_type":    req.Payload.Data.ClientInformation.NetworkType,
-					"platform":        req.Payload.Data.ClientInformation.Platform,
-					"browser":         req.Payload.Data.ClientInformation.Browser,
-					"browser_version": req.Payload.Data.ClientInformation.BrowserVersion,
+					"ip":              req.GWPayload.GWData.ClientInformation.IP,
+					"device_type":     req.GWPayload.GWData.ClientInformation.DeviceType,
+					"network_type":    req.GWPayload.GWData.ClientInformation.NetworkType,
+					"platform":        req.GWPayload.GWData.ClientInformation.Platform,
+					"browser":         req.GWPayload.GWData.ClientInformation.Browser,
+					"browser_version": req.GWPayload.GWData.ClientInformation.BrowserVersion,
 				},
 				"http_request": map[string]interface{}{
-					"method": req.Payload.Data.HTTPRequest.Method,
-					"url":    req.Payload.Data.HTTPRequest.URL,
-					"host":   req.Payload.Data.HTTPRequest.Host,
+					"method": req.GWPayload.GWData.HTTPRequest.Method,
+					"url":    req.GWPayload.GWData.HTTPRequest.URL,
+					"host":   req.GWPayload.GWData.HTTPRequest.Host,
 					"headers": map[string]interface{}{
-						"user-agent":     req.Payload.Data.HTTPRequest.Headers.UserAgent,
-						"content-type":   req.Payload.Data.HTTPRequest.Headers.ContentType,
-						"content-length": req.Payload.Data.HTTPRequest.Headers.ContentLength,
-						"referer":        req.Payload.Data.HTTPRequest.Headers.Referer,
+						"user-agent":     req.GWPayload.GWData.HTTPRequest.Headers.UserAgent,
+						"content-type":   req.GWPayload.GWData.HTTPRequest.Headers.ContentType,
+						"content-length": req.GWPayload.GWData.HTTPRequest.Headers.ContentLength,
+						"referer":        req.GWPayload.GWData.HTTPRequest.Headers.Referer,
 					},
-					"query_parameters": req.Payload.Data.HTTPRequest.QueryParams,
-					"body":             req.Payload.Data.HTTPRequest.Body,
+					"query_parameters": req.GWPayload.GWData.HTTPRequest.QueryParams,
+					"body":             req.GWPayload.GWData.HTTPRequest.Body,
 				},
 			},
 		},
@@ -681,22 +588,14 @@ func processCommonAttackDetection(req GWRequestBody, eventInfo string, cad map[s
 		nil
 }
 
-func getDomain(fullUrl string) (string, error) {
-	parsedUrl, err := url.Parse(fullUrl)
-	if err != nil {
-		return "", err
-	}
-	return parsedUrl.Host, nil
-}
-
-func processDGADetection(req GWRequestBody, eventInfo string, dgad map[string]interface{}) (float64, error) {
+func processDGADetection(req shared.GWRequestBody, eventInfo string, _ map[string]interface{}) (float64, error) {
 	log.WithFields(logrus.Fields{
 		"msg": "Event Info: " + eventInfo,
 	}).Debug("Processing DGA Detection")
 
-	refererURL := req.Payload.Data.HTTPRequest.Headers.Referer
+	refererURL := req.GWPayload.GWData.HTTPRequest.Headers.Referer
 
-	domain, err := getDomain(refererURL)
+	domain, err := helper.GetDomain(refererURL)
 	if err != nil {
 		return 0, err
 	}
@@ -762,8 +661,8 @@ func processDGADetection(req GWRequestBody, eventInfo string, dgad map[string]in
 	return score, nil
 }
 
-func processAgentProfile(agentId string) (string, error) {
-	agentProfile, err := handlerRedis(agentId, "")
+func processAgentProfile(agentId string, agentValue string) (string, error) {
+	agentProfile, err := handlerRedis(agentId, agentValue)
 	if err != nil {
 		log.WithFields(logrus.Fields{
 			"msg": err,
@@ -781,25 +680,13 @@ func processAgentProfile(agentId string) (string, error) {
 
 }
 
-// sendErrorResponse sends a JSON error response
-func sendErrorResponse(w http.ResponseWriter, message string, errorCode int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(errorCode)
-	json.NewEncoder(w).Encode(ErrorResponse{
-		Status:    "error",
-		Message:   message,
-		ErrorCode: errorCode,
-	})
-}
-
 // getAPIKey retrieves the API key based on the configuration
-
 func getAPIKey() (string, error) {
 	awsRegion := os.Getenv("AWS_REGION")
 	awsSecretName := os.Getenv("AWS_SECRET_NAME")
 	awsAPISecretKeyName := os.Getenv("AWS_API_SECRET_KEY_NAME")
 
-	awsAPIKeyVaule, err := wshelper.GetAWSSecret(awsRegion, awsSecretName, awsAPISecretKeyName)
+	awsAPIKeyVaule, err := helper.GetAWSSecret(awsRegion, awsSecretName, awsAPISecretKeyName)
 
 	return awsAPIKeyVaule, err
 }
@@ -809,13 +696,13 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		apiKey, err := getAPIKey()
 		if err != nil {
-			sendErrorResponse(w, "Internal server error", http.StatusInternalServerError)
+			helper.SendErrorResponse(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
 
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			sendErrorResponse(w, "Unauthorized", http.StatusUnauthorized)
+			helper.SendErrorResponse(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
@@ -823,13 +710,13 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 		authHeader = authHeader[len("Basic "):]
 		decodedAuthHeader, err := base64.StdEncoding.DecodeString(authHeader)
 		if err != nil {
-			sendErrorResponse(w, "Unauthorized", http.StatusUnauthorized)
+			helper.SendErrorResponse(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
 		expectedAuthValue := fmt.Sprintf("ws-agent:%s", apiKey)
 		if string(decodedAuthHeader) != expectedAuthValue {
-			sendErrorResponse(w, "Unauthorized", http.StatusUnauthorized)
+			helper.SendErrorResponse(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
@@ -840,18 +727,19 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 // Main function
 func main() {
 	log.Info("WS Gateway Service is running on port 5000...")
-	// Initialize the wslogger
+	// Initialize the logger
 	logMaxSize, _ := strconv.Atoi(os.Getenv("LOG_MAX_SIZE"))
 	logMaxBackups, _ := strconv.Atoi(os.Getenv("LOG_MAX_BACKUPS"))
 	logMaxAge, _ := strconv.Atoi(os.Getenv("LOG_MAX_AGE"))
 	logCompression, _ := strconv.ParseBool(os.Getenv("LOG_COMPRESSION"))
-	wslogger.SetupWSLogger("ws-gateway-service", logMaxSize, logMaxBackups, logMaxAge, logCompression)
+	logger.SetupWSLogger("ws-gateway-service", logMaxSize, logMaxBackups, logMaxAge, logCompression)
 	// Wrap the handler with a 30-second timeout
 	timeoutHandlerGW := http.TimeoutHandler(apiKeyAuthMiddleware(http.HandlerFunc(handleGateway)), 30*time.Second, "Request timed out")
 	timeOutHandlerAP := http.TimeoutHandler(apiKeyAuthMiddleware(http.HandlerFunc(HandleAgentProfile)), 30*time.Second, "Request timed out")
-
+	timeOutHandlerAS := http.TimeoutHandler(apiKeyAuthMiddleware(http.HandlerFunc(HandleAgentSynchronize)), 30*time.Second, "Request timed out")
 	// Register the timeout handler
 	http.Handle("/api/v1/ws/services/gateway", timeoutHandlerGW)
 	http.Handle("/api/v1/ws/services/gateway/agent-profile", timeOutHandlerAP)
+	http.Handle("/api/v1/ws/services/gateway/agent-synchronize", timeOutHandlerAS)
 	log.Fatal(http.ListenAndServe(":5000", nil))
 }
