@@ -116,6 +116,7 @@ func handleGateway(w http.ResponseWriter, r *http.Request) {
 	err = json.Unmarshal([]byte(agentProfile), &agent)
 	if err != nil {
 		log.WithField("msg", err).Error("Failed to parse agent configuration from Redis")
+		http.Error(w, "Whale Sentinel - Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
@@ -251,6 +252,8 @@ func HandleAgentProfile(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(logrus.Fields{
 			"msg": err,
 		}).Error("Error processing Agent Configuration")
+		http.Error(w, "Whale Sentinel - Internal Server Error", http.StatusInternalServerError)
+		return
 	}
 
 	var agent shared.AgentProfileRaw
@@ -258,6 +261,7 @@ func HandleAgentProfile(w http.ResponseWriter, r *http.Request) {
 	err = json.Unmarshal([]byte(agentProfile), &agent)
 	if err != nil {
 		log.WithField("msg", err).Error("Failed to parse agent configuration from Redis")
+		http.Error(w, "Whale Sentinel - Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
@@ -353,6 +357,8 @@ func HandleAgentSynchronize(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(logrus.Fields{
 			"msg": err,
 		}).Error("Error processing Agent Configuration")
+		http.Error(w, "Whale Sentinel - Internal Server Error", http.StatusInternalServerError)
+		return
 	}
 
 	var agentProfile map[string]map[string]interface{}
@@ -372,6 +378,8 @@ func HandleAgentSynchronize(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(logrus.Fields{
 			"msg": err,
 		}).Error("Error marshalling updated agent profile")
+		http.Error(w, "Whale Sentinel - Internal Server Error", http.StatusInternalServerError)
+		return
 	}
 
 	updateProfifle, err := processAgentProfile(req.AgentID, string(updatedJson))
@@ -379,14 +387,17 @@ func HandleAgentSynchronize(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(logrus.Fields{
 			"msg": err,
 		}).Error("Error updating Agent Profile")
+		http.Error(w, "Whale Sentinel - Internal Server Error", http.StatusInternalServerError)
+		return
 	}
 
 	response := shared.ASResponseBody{
-		Status:           "success",
-		Message:          "Request processed successfully",
-		Profile:          updateProfifle,
-		EventInfo:        eventInfo,
-		RequestCreatedAt: req.RequestCreatedAt,
+		Status:             "success",
+		Message:            "Request processed successfully",
+		Profile:            updateProfifle,
+		EventInfo:          eventInfo,
+		RequestCreatedAt:   req.RequestCreatedAt,
+		RequestProcessedAt: time.Now().Format(time.RFC3339),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
