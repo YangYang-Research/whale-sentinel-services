@@ -1,0 +1,15 @@
+[submodule "whale-sentinel-common-attack-detection"]
+	path = whale-sentinel-common-attack-detection
+	url = https://github.com/YangYang-Research/whale-sentinel-common-attack-detection.git
+[submodule "whale-sentinel-configuration-service"]
+	path = whale-sentinel-configuration-service
+	url = https://github.com/YangYang-Research/whale-sentinel-configuration-service.git
+[submodule "whale-sentinel-gateway-service"]
+	path = whale-sentinel-gateway-service
+	url = https://github.com/YangYang-Research/whale-sentinel-gateway-service.git
+[submodule "whale-sentinel-dga-detection"]
+	path = whale-sentinel-dga-detection
+	url = https://github.com/YangYang-Research/whale-sentinel-dga-detection.git
+[submodule "whale-sentinel-web-attack-detection"]
+	path = whale-sentinel-web-attack-detection
+	url = https://github.com/YangYang-Research/whale-sentinel-web-attack-detection.git
