@@ -117,7 +117,7 @@ services:
       dockerfile: whale-sentinel-common-attack-detection/Dockerfile
     container_name: whale-sentinel-common-attack-detection
     restart: always
-    image: whale-sentinel/ws-services/whale-sentinel-common-attack-detection:latest
+    image: whale-sentinel/whale-sentinel-services/whale-sentinel-common-attack-detection:latest
     # ports:
     #   - "5003:443" # Uncomment this line to expose the service on port 5003
     environment:
