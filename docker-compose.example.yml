@@ -1,102 +1,154 @@
 version: '3.8'
 
 services:
-  ws-gateway-service:
-    # build: # Uncomment this line to build the image from the Dockerfile
-    #   context: .
-    #   dockerfile: ws-gateway-service/Dockerfile
-    container_name: ws-gateway-service
-    image: whale-sentinel/ws-services/ws-gateway-service:latest
+  whale-sentinel-gateway-service:
+    build: # Uncomment this line to build the image from the Dockerfile
+      context: .
+      dockerfile: whale-sentinel-gateway-service/Dockerfile
+    container_name: whale-sentinel-gateway-service
+    restart: always
+    image: whale-sentinel/whale-sentinel-services/whale-sentinel-gateway-service:latest
     ports:
       - "5000:443"
     environment:
       AWS_REGION: your-aws-region
-      AWS_ACCESS_KEY_ID: your-aws-access-key-id
-      AWS_SECRET_ACCESS_KEY: your-aws-secret-access-key
-      AWS_SECRET_NAME: your-aws-secret-name
-      AWS_API_SECRET_KEY_NAME: your-aws-api-secret-key-name
-      WS_MODULE_WEB_ATTACK_DETECTION_URL: https://ws-web-attack-detection
+      AWS_ACCESS_KEY_ID: your-aws-access-key
+      AWS_SECRET_ACCESS_KEY: your-aws-secret-key
+      AWS_SECRET_NAME: your-whale-sentinel-secret-name
+      WHALE_SENTINEL_AGENT_SECRET_KEY_NAME: your-whale-sentinel-secret-key-name
+      WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME: your-whale-sentinel-secret-key-name
+      WS_MODULE_WEB_ATTACK_DETECTION_URL: https://whale-sentinel-web-attack-detection
       WS_MODULE_WEB_ATTACK_DETECTION_ENDPOINT: /api/v1/ws/services/web-attack-detection
-      WS_MODULE_DGA_DETECTION_URL: https://ws-dga-detection
+      WS_MODULE_DGA_DETECTION_URL: https://whale-sentinel-dga-detection
       WS_MODULE_DGA_DETECTION_ENDPOINT: /api/v1/ws/services/dga-detection
-      WS_MODULE_COMMON_ATTACK_DETECTION_URL: https://ws-common-attack-detection
+      WS_MODULE_COMMON_ATTACK_DETECTION_URL: https://whale-sentinel-common-attack-detection
       WS_MODULE_COMMON_ATTACK_DETECTION_ENDPOINT: /api/v1/ws/services/common-attack-detection
+      WS_MODULE_CONFIGURATION_SERVICE_URL: https://whale-sentinel-configuration-service
+      WS_MODULE_CONFIGURATION_SERVICE_ENDPOINT: /api/v1/ws/services/configuration
       LOG_MAX_SIZE: 10000000
       LOG_MAX_BACKUPS: 3
       LOG_MAX_AGE: 30
       LOG_COMPRESS: "true"
+      REDIS_HOST: whale-sentinel-redis-cache
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: your-redis-password
     volumes:
-      - /var/log/whale-sentinel/ws-gateway-service:/var/log/whale-sentinel/ws-gateway-service
+      - /var/log/whale-sentinel/whale-sentinel-gateway-service:/var/log/whale-sentinel/whale-sentinel-gateway-service
     networks:
       - whale-sentinel-service-network
 
-  ws-web-attack-detection:
-    # build: # Uncomment this line to build the image from the Dockerfile
-    #   context: .
-    #   dockerfile: ws-web-attack-detection/Dockerfile
-    container_name: ws-web-attack-detection
-    image: whale-sentinel/ws-services/ws-web-attack-detection:latest
+  whale-sentinel-configuration-service:
+    build: # Uncomment this line to build the image from the Dockerfile
+      context: .
+      dockerfile: whale-sentinel-configuration-service/Dockerfile
+    container_name: whale-sentinel-configuration-service
+    restart: always
+    image: whale-sentinel/whale-sentinel-services/whale-sentinel-configuration-service:latest
+    ports:
+      - "5004:443" # Uncomment this line to expose the service on port 5004
+    environment:
+      AWS_REGION: your-aws-region
+      AWS_ACCESS_KEY_ID: your-aws-access-key
+      AWS_SECRET_ACCESS_KEY: your-aws-secret-key
+      AWS_SECRET_NAME: your-whale-sentinel-secret-name
+      WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME: your-whale-sentinel-secret-key-name
+      WHALE_SENTINEL_CONTROLLER_SECRET_KEY_NAME: your-whale-sentinel-secret-key-name
+      WS_CONTROLLER_PROCESSOR_URL: http://127.0.0.1:8000
+      WS_CONTROLLER_PROCESSOR_ENDPOINT: /api/v1/ws/controllers/processor
+      LOG_MAX_SIZE: 10000000
+      LOG_MAX_BACKUPS: 3
+      LOG_MAX_AGE: 30
+      LOG_COMPRESS: "true"
+      REDIS_HOST: ws-redis-cache
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: your-redis-password
+    volumes:
+      - /var/log/whale-sentinel/whale-sentinel-configuration-service:/var/log/whale-sentinel/whale-sentinel-configuration-service
+    networks:
+      - whale-sentinel-service-network
+
+  whale-sentinel-web-attack-detection:
+    build: # Uncomment this line to build the image from the Dockerfile
+      context: .
+      dockerfile: whale-sentinel-web-attack-detection/Dockerfile
+    container_name: whale-sentinel-web-attack-detection
+    restart: always
+    image: whale-sentinel/whale-sentinel-services/whale-sentinel-web-attack-detection:latest
     # ports:
     #   - "5001:443" # Uncomment this line to expose the service on port 5001
     environment:
       AWS_REGION: your-aws-region
-      AWS_ACCESS_KEY_ID: your-aws-access-key-id
-      AWS_SECRET_ACCESS_KEY: your-aws-secret-access-key
-      AWS_SECRET_NAME: your-aws-secret-name
-      AWS_API_SECRET_KEY_NAME: your-aws-api-secret-key-name
+      AWS_ACCESS_KEY_ID: your-aws-access-key
+      AWS_SECRET_ACCESS_KEY: your-aws-secret-key
+      AWS_SECRET_NAME: your-whale-sentinel-secret-name
+      WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME: your-whale-sentinel-secret-key-name
       LOG_MAX_SIZE: 10000000
       LOG_MAX_BACKUPS: 3
     volumes:
-      - /var/log/whale-sentinel/ws-web-attack-detection:/var/log/whale-sentinel/ws-web-attack-detection
+      - /var/log/whale-sentinel/whale-sentinel-web-attack-detection:/var/log/whale-sentinel/whale-sentinel-web-attack-detection
     networks:
       - whale-sentinel-service-network
   
-  ws-dga-detection:
-    # build: # Uncomment this line to build the image from the Dockerfile
-    #   context: .
-    #   dockerfile: ws-dga-detection/Dockerfile
-    container_name: ws-dga-detection
-    image: whale-sentinel/ws-services/ws-dga-detection:latest
+  whale-sentinel-dga-detection:
+    build: # Uncomment this line to build the image from the Dockerfile
+      context: .
+      dockerfile: whale-sentinel-dga-detection/Dockerfile
+    container_name: whale-sentinel-dga-detection
+    restart: always
+    image: whale-sentinel/whale-sentinel-services/whale-sentinel-dga-detection:latest
     # ports:
     #   - "5002:443" # Uncomment this line to expose the service on port 5002
     environment:
       AWS_REGION: your-aws-region
-      AWS_ACCESS_KEY_ID: your-aws-access-key-id
-      AWS_SECRET_ACCESS_KEY: your-aws-secret-access-key
-      AWS_SECRET_NAME: your-aws-secret-name
-      AWS_API_SECRET_KEY_NAME: your-aws-api-secret-key-name
+      AWS_ACCESS_KEY_ID: your-aws-access-key
+      AWS_SECRET_ACCESS_KEY: your-aws-secret-key
+      AWS_SECRET_NAME: your-whale-sentinel-secret-name
+      WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME: your-whale-sentinel-secret-key-name
       LOG_MAX_SIZE: 10000000
       LOG_MAX_BACKUPS: 3
     volumes:
-      - /var/log/whale-sentinel/ws-dga-detection:/var/log/whale-sentinel/ws-dga-detection
+      - /var/log/whale-sentinel/whale-sentinel-dga-detection:/var/log/whale-sentinel/whale-sentinel-dga-detection
     networks:
       - whale-sentinel-service-network
   
-  ws-common-attack-detection:
-    # build: # Uncomment this line to build the image from the Dockerfile
-    #   context: .
-    #   dockerfile: ws-common-attack-detection/Dockerfile
-    container_name: ws-common-attack-detection
-    image: whale-sentinel/ws-services/ws-common-attack-detection:latest
+  whale-sentinel-common-attack-detection:
+    build: # Uncomment this line to build the image from the Dockerfile
+      context: .
+      dockerfile: whale-sentinel-common-attack-detection/Dockerfile
+    container_name: whale-sentinel-common-attack-detection
+    restart: always
+    image: whale-sentinel/ws-services/whale-sentinel-common-attack-detection:latest
     # ports:
     #   - "5003:443" # Uncomment this line to expose the service on port 5003
     environment:
       AWS_REGION: your-aws-region
-      AWS_ACCESS_KEY_ID: your-aws-access-key-id
-      AWS_SECRET_ACCESS_KEY: your-aws-secret-access-key
-      AWS_SECRET_NAME: your-aws-secret-name
-      AWS_API_SECRET_KEY_NAME: your-aws-api-secret-key-name
+      AWS_ACCESS_KEY_ID: your-aws-access-key
+      AWS_SECRET_ACCESS_KEY: your-aws-secret-key
+      AWS_SECRET_NAME: your-whale-sentinel-secret-name
+      WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME: your-whale-sentinel-secret-key-name
       LOG_MAX_SIZE: 10000000
       LOG_MAX_BACKUPS: 3
       LOG_MAX_AGE: 30
       LOG_COMPRESS: "true"
     volumes:
-      - /var/log/whale-sentinel/ws-common-attack-detection:/var/log/whale-sentinel/ws-common-attack-detection
+      - /var/log/whale-sentinel/whale-sentinel-common-attack-detection:/var/log/whale-sentinel/whale-sentinel-common-attack-detection
     networks:
       - whale-sentinel-service-network
 
-  fluent-bit:
-    image: fluent/fluent-bit:latest
+  whale-sentinel-redis-cache:
+    image: redis:7.2
+    container_name: whale-sentinel-redis-cache
+    restart: always
+    # ports:
+    #   - "6379:6379" # Uncomment this line to expose the service on port 6379
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    networks:
+      - whale-sentinel-service-network
+
+  whale-sentinel-fluent-bit:
+    image: fluent/fluent-bit:4.0
     container_name: fluent-bit
     restart: always
     volumes:
@@ -114,10 +166,12 @@ services:
       - whale-sentinel-service-network
       # - ws-opensearch_whale-sentinel-controller-network # Uncomment this line if you want to connect Fluent Bit to the OpenSearch network
     depends_on:
-      - ws-gateway-service
-      - ws-web-attack-detection
-      - ws-dga-detection
-      - ws-common-attack-detection
+      - whale-sentinel-gateway-service
+      - whale-sentinel-web-attack-detection
+      - whale-sentinel-dga-detection
+      - whale-sentinel-common-attack-detection
+      - whale-sentinel-configuration-service
+      - whale-sentinel-redis-cache
 
 networks:
   whale-sentinel-service-network:
