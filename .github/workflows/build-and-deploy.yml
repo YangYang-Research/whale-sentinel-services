@@ -1,0 +1,50 @@
+name: Build & Push Docker Images
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-push:
+    if: github.event.pusher.name == 'web-flow'  # optional: filter for PR merge events
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repo with history
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # required to compare branches
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1  # adjust to your region
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Get list of changed directories
+      id: changed
+      run: |
+        echo "CHANGED_DIRS<<EOF" >> $GITHUB_ENV
+        git diff --name-only origin/main...origin/dev | \
+          grep '^whale-sentinel-' | \
+          cut -d/ -f1 | \
+          sort -u >> $GITHUB_ENV
+        echo "EOF" >> $GITHUB_ENV
+
+    - name: Show changed directories
+      run: echo "${{ env.CHANGED_DIRS }}"
+
+    - name: Build & Push Docker Images
+      run: |
+        for dir in $CHANGED_DIRS; do
+          IMAGE_NAME="YOUR_ECR_ID.dkr.ecr.us-east-1.amazonaws.com/$dir:latest"
+          echo "Building $dir -> $IMAGE_NAME"
+          docker build -t $IMAGE_NAME ./$dir
+          docker push $IMAGE_NAME
+        done
