@@ -1,50 +1,59 @@
-name: Build & Push Docker Images
+name: Build & Push Docker Images on PR Merge
 
 on:
-  push:
+  pull_request:
+    types: [closed]
     branches:
       - main
 
 jobs:
   build-and-push:
-    if: github.event.pusher.name == 'web-flow'  # optional: filter for PR merge events
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repo with history
+    - name: Checkout repo
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # required to compare branches
+        fetch-depth: 0
+
+    - name: Extract version from PR description
+      id: extract_version
+      run: |
+        DESCRIPTION="${{ github.event.pull_request.body }}"
+        VERSION=$(echo "$DESCRIPTION" | grep -i '^Version:' | sed -E 's/Version:\s*//i')
+        if [[ -z "$VERSION" ]]; then
+          echo "❌ No 'Version:' tag found in PR description."
+          exit 1
+        fi
+        echo "VERSION_TAG=$VERSION" >> $GITHUB_ENV
+        echo "✅ Found version: $VERSION"
 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1  # adjust to your region
+        aws-region: us-east-1
 
-    - name: Login to Amazon ECR
-      id: login-ecr
+    - name: Login to Amazon ECR Public
       uses: aws-actions/amazon-ecr-login@v2
+      with:
+        registry-type: public
 
-    - name: Get list of changed directories
+    - name: Get changed submodules from dev to main
       id: changed
       run: |
-        echo "CHANGED_DIRS<<EOF" >> $GITHUB_ENV
-        git diff --name-only origin/main...origin/dev | \
-          grep '^whale-sentinel-' | \
-          cut -d/ -f1 | \
-          sort -u >> $GITHUB_ENV
-        echo "EOF" >> $GITHUB_ENV
-
-    - name: Show changed directories
-      run: echo "${{ env.CHANGED_DIRS }}"
+        git fetch origin dev
+        echo "CHANGED_DIRS=$(git diff --name-only origin/main...origin/dev | grep '^whale-sentinel-' | cut -d/ -f1 | sort -u | xargs)" >> $GITHUB_ENV
 
     - name: Build & Push Docker Images
       run: |
         for dir in $CHANGED_DIRS; do
-          IMAGE_NAME="YOUR_ECR_ID.dkr.ecr.us-east-1.amazonaws.com/$dir:latest"
-          echo "Building $dir -> $IMAGE_NAME"
-          docker build -t $IMAGE_NAME ./$dir
-          docker push $IMAGE_NAME
+          IMAGE_NAME="public.ecr.aws/YOUR_ECR_ALIAS/$dir"
+          echo "🛠️ Building $dir -> $IMAGE_NAME"
+
+          docker build -t $IMAGE_NAME:latest -t $IMAGE_NAME:${VERSION_TAG} ./$dir
+          docker push $IMAGE_NAME:latest
+          docker push $IMAGE_NAME:${VERSION_TAG}
         done
