@@ -18,12 +18,6 @@ jobs:
         fetch-depth: 0
         submodules: true
 
-    - name: Ensure Docker is running
-      run: |
-        sudo systemctl start docker
-        docker --version
-        docker info
-
     - name: Install Horusec CLI
       run: |
         curl -fsSL https://raw.githubusercontent.com/ZupIT/horusec/main/deployments/scripts/install.sh | bash -s latest-beta
@@ -31,10 +25,15 @@ jobs:
 
     - name: Run Horusec scan
       run: |
-        horusec start -p="./" -o="json" -O="horusec-report.json"
+        horusec start -p="./" -o="sarif" -O="horusec-results.sarif"
 
     - name: Upload Horusec report
       uses: actions/upload-artifact@v4
       with:
         name: horusec-report
         path: horusec-report.json
+    
+    - name: Upload Horusec scan to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: horusec-results.sarif
