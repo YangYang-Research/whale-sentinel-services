@@ -31,6 +31,12 @@ jobs:
       run: |
         horusec start -p="./" -o="sarif" -O="horusec-results.sarif"
     
+    - name: Upload Horusec result
+      uses: actions/upload-artifact@v4
+      with:
+        name: horusec-result
+        path: horusec-results.sarif
+            
     - name: Upload Horusec scan to GitHub Security tab
       uses: github/codeql-action/upload-sarif@v3
       with:
