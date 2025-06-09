@@ -50,7 +50,7 @@ jobs:
     - name: Build & Push Docker Images
       run: |
         for dir in $CHANGED_DIRS; do
-          IMAGE_NAME="public.ecr.aws/YOUR_ECR_ALIAS/$dir"
+          IMAGE_NAME="public.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/$dir"
           echo "🛠️ Building $dir -> $IMAGE_NAME"
 
           docker build -t $IMAGE_NAME:latest -t $IMAGE_NAME:${VERSION_TAG} ./$dir
