@@ -1,0 +1,33 @@
+name: Horusec Scan
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main, dev]
+
+jobs:
+  horusec-analysis:
+    name: Run Horusec Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Horusec CLI
+      run: |
+        curl -fsSL https://horusec.io/bin/install.sh | bash
+        horusec version
+
+    - name: Run Horusec scan
+      env:
+        HORUSEC_CLI_REPOSITORY_AUTHORIZATION: ${{ secrets.HORUSEC_TOKEN }} # Optional for SaaS
+      run: |
+        horusec start -p="./" -e="true" -o="json" -O="horusec-report.json"
+
+    - name: Upload Horusec Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: horusec-report
+        path: horusec-report.json
