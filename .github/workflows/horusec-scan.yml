@@ -14,15 +14,16 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-
+    
+    - name: Set up Docker
+      uses: docker/setup-buildx-action@v3
+        
     - name: Install Horusec CLI
       run: |
         curl -fsSL https://raw.githubusercontent.com/ZupIT/horusec/main/deployments/scripts/install.sh | bash -s latest
         horusec version
 
     - name: Run Horusec scan
-      env:
-        HORUSEC_CLI_REPOSITORY_AUTHORIZATION: ${{ secrets.HORUSEC_TOKEN }} # Optional for SaaS
       run: |
         horusec start -p="./" -e="true" -o="json" -O="horusec-report.json"
 
