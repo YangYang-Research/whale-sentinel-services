@@ -17,7 +17,7 @@ jobs:
 
     - name: Install Horusec CLI
       run: |
-        curl -fsSL https://horusec.io/bin/install.sh | bash
+        curl -fsSL https://raw.githubusercontent.com/ZupIT/horusec/main/deployments/scripts/install.sh | bash -s latest
         horusec version
 
     - name: Run Horusec scan
