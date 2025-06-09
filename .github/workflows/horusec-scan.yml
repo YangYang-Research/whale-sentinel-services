@@ -27,7 +27,7 @@ jobs:
 
     - name: Run Horusec scan
       run: |
-        horusec start -p="./" -e="true" -o="json" -O="horusec-report.json"
+        horusec start -p="./" -e="true"
 
     - name: Upload Horusec report
       uses: actions/upload-artifact@v4
