@@ -17,13 +17,11 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Install Docker (if missing)
+    - name: Ensure Docker is running
       run: |
-        sudo apt-get update
-        sudo apt-get install -y docker.io
         sudo systemctl start docker
-        sudo usermod -aG docker $USER
         docker --version
+        docker info
 
     - name: Install Horusec CLI
       run: |
