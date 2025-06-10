@@ -36,18 +36,22 @@ jobs:
           for DIR in "${!REPO_MAP[@]}"; do
             echo "\n🔍 Checking submodule $DIR"
 
-            SHA=$(git ls-tree HEAD $DIR | awk '{print $3}')
-            echo "🧾 Commit SHA from main repo: $SHA"
+              cd "$DIR"
+              SHA=$(git rev-parse HEAD)
+              echo "🧾 Commit SHA in submodule: $SHA"
 
-            COMMIT_MSG=$(git log -1 --pretty=%B $SHA)
-            if [[ "$COMMIT_MSG" =~ Release:[[:space:]]*([0-9a-zA-Z.-]+) ]]; then
-              VERSION="${BASH_REMATCH[1]}"
-              echo "✅ Found release version: $VERSION"
-              MATRIX_INCLUDE+=("{\"name\":\"${DIR}\",\"version\":\"${VERSION}\",\"sha\":\"${SHA}\"}")
-            else
-              echo "⚠️ No Release: found in commit message. Skipping."
-            fi
-          done
+              # Lấy commit message từ repo submodule
+              COMMIT_MSG=$(git log -1 --pretty=%B)
+              cd - > /dev/null
+
+              if [[ "$COMMIT_MSG" =~ Release:[[:space:]]*([0-9a-zA-Z.-]+) ]]; then
+                VERSION="${BASH_REMATCH[1]}"
+                echo "✅ Found release version: $VERSION"
+                MATRIX_INCLUDE+=("{\"name\":\"${DIR}\",\"version\":\"${VERSION}\",\"sha\":\"${SHA}\"}")
+              else
+                echo "⚠️ No Release: found in commit message. Skipping build."
+              fi
+            done
 
           MATRIX_JSON=$(printf '[%s]' "$(IFS=,; echo "${MATRIX_INCLUDE[*]}")")
           echo "release_matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
