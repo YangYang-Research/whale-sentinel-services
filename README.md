@@ -45,7 +45,7 @@
 
 - Navigate to the [Releases](https://github.com/YangYang-Research/whale-sentinel-services/releases) page.
 
-- Download the package ZIP and extract it.
+- Download the package in ##Package Release for Deployment and extract it.
 
 2. Configure the Docker Environment
 
@@ -56,6 +56,21 @@
 3. Apply Your Configuration
 
 - Replace all placeholder values in docker-compose.yml and other config files (fluent-bit.conf, etc.) with your actual environment-specific values (e.g., AWS credentials, secret names, ports).
+
+| **Key**                                     | **Description**                                  | **Example / Placeholder**             |
+| ------------------------------------------- | ------------------------------------------------ | ------------------------------------- |
+| `AWS_REGION`                                | AWS region where services and secrets are hosted | `your-aws-region`                     |
+| `AWS_ACCESS_KEY_ID`                         | AWS access key ID                                | `your-aws-access-key`                 |
+| `AWS_SECRET_ACCESS_KEY`                     | AWS secret access key                            | `your-aws-secret-key`                 |
+| `AWS_SECRET_NAME`                           | Name of the secret in AWS Secrets Manager        | `your-whale-sentinel-secret-name`     |
+| `WHALE_SENTINEL_AGENT_SECRET_KEY_NAME`      | Key name for agent component in AWS secret       | `your-whale-sentinel-secret-key-name` |
+| `WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME`    | Key name for service component in AWS secret     | `your-whale-sentinel-secret-key-name` |
+| `WHALE_SENTINEL_CONTROLLER_SECRET_KEY_NAME` | Key name for controller component in AWS secret  | `your-whale-sentinel-secret-key-name` |
+| `REDIS_PASSWORD`                            | Password used to access Redis                    | `your-redis-password`                 |
+| `WS_CONTROLLER_PROCESSOR_URL`               | URL to Whale Sentinel MDP endpoint               | `your-whale-sentinel-mdp-url`         |
+| `OPENSEARCH_ENDPOINT`                       | Endpoint URL for OpenSearch                      | `your-opensearch-endpoint`            |
+| `OPENSEARCH_USERNAME`                       | OpenSearch username                              | `your-opensearch-username`            |
+| `OPENSEARCH_PASSWORD`                       | OpenSearch password                              | `your-opensearch-password`            |
 
 4. Start the Services
 
