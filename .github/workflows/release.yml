@@ -54,7 +54,7 @@ jobs:
           ZIP_NAME="whale-sentinel-services-${VERSION}.zip"
 
           echo "📦 Creating $ZIP_NAME..."
-          zip -r "$ZIP_NAME" fluent-bit redis docker-compose.example.yml
+          zip -r "$ZIP_NAME" fluent-bit redis docker-compose.example.yml README.md
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
 
       - name: Upload zip as artifact
