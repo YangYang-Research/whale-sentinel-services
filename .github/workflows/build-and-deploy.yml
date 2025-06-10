@@ -40,7 +40,8 @@ jobs:
           for DIR in "${!REPO_MAP[@]}"; do
             echo "\n🔍 Checking submodule $DIR"
 
-            SHA=$(git submodule status $DIR | awk '{print $1}')
+            git submodule update --init --recursive
+            SHA=$(cd $DIR && git rev-parse HEAD)
             echo "🧾 Commit SHA: $SHA"
 
             # Check commit message for "Release: <version>"
