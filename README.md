@@ -31,7 +31,7 @@
 
 - In AWS Secrets Manager, create a new secret named: AWS_SECRET_NAME
 
-- Add the following keys to your secret:
+- Create your key and secret for following keys:
 
     - WHALE_SENTINEL_AGENT_SECRET_KEY_NAME
 
