@@ -2,14 +2,52 @@ name: Release Configs
 
 on:
   push:
-    tags:
-      - 'v*-config'
+    branches:
+      - main
 
 jobs:
-  release:
+  check-release-version:
+    name: Check for "Release:" in commit message
     runs-on: ubuntu-latest
+    outputs:
+      should_proceed: ${{ steps.check.outputs.should_proceed }}
+      release_version: ${{ steps.extract_version.outputs.release_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+
+      - name: Check commit message
+        id: check
+        run: |
+          echo "🔍 Checking last commit message..."
+
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          echo "📝 Commit message: $COMMIT_MSG"
+
+          if echo "$COMMIT_MSG" | grep -q "Release:"; then
+            echo "✅ Found 'Release:' in commit message."
+            echo "should_proceed=true" >> $GITHUB_OUTPUT
+          else
+            echo "⛔ No 'Release:' found. Skipping workflow."
+            echo "should_proceed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract Release Version
+        id: extract_version
+        run: |
+          RELEASE_VERSION=$(echo "$COMMIT_MSG" | grep -o "Release:[^ ]*" | sed 's/Release://g')
+          echo "Detected Release Version: $RELEASE_VERSION"
+          echo "release_version=$RELEASE_VERSION" >> $GITHUB_OUTPUT
+
+  release:
+    name: Package and Upload Configs
+    runs-on: ubuntu-latest
+    needs: check-release-version
+    if: needs.check-release-version.outputs.should_proceed == 'true'
     env:
-      RELEASE_FILE: whale-sentinel-configs-${{ github.ref_name }}.zip
+      RELEASE_FILE: whale-sentinel-configs-${{ needs.check-release-version.outputs.release_version }}.zip
 
     steps:
       - uses: actions/checkout@v4
@@ -23,20 +61,13 @@ jobs:
         run: |
           if [ -f "$RELEASE_FILE" ]; then
             echo "✅ File exists"
-            ls -lh "$RELEASE_FILE"
           else
             echo "❌ File not found"
             exit 1
           fi
 
-      - name: Wait to ensure file flush
-        run: sleep 2
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload artifact for download
+        uses: actions/upload-artifact@v4
         with:
-          name: "Release ${{ github.ref_name }}"
-          tag_name: ${{ github.ref_name }}
-          body: "Auto release of configuration files"
-          files: ${{ env.RELEASE_FILE }}
-          token: ${{ secrets.GH_PAT }}
+          name: ${{ env.RELEASE_FILE }}
+          path: ${{ env.RELEASE_FILE }}
