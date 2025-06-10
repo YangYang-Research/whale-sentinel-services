@@ -41,11 +41,11 @@
 
 ## 🚦 Starting Whale Sentinel Services
 
-1. Download & Unzip the Latest Release
+1. Download & Unzip the Latest Package Release for Deployment
 
 - Navigate to the [Releases](https://github.com/YangYang-Research/whale-sentinel-services/releases) page.
 
-- Download the latest release ZIP and extract it.
+- Download the package ZIP and extract it.
 
 2. Configure the Docker Environment
 
