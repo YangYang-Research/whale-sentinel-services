@@ -37,7 +37,7 @@ jobs:
       - name: Extract Release Version
         id: extract_version
         run: |
-          RELEASE_VERSION=$(echo "$COMMIT_MSG" | grep -oP "Release:\s*\K[0-9a-zA-Z.-]+")
+          RELEASE_VERSION=$(echo "$COMMIT_MSG" | grep -oE "Release:\s*[0-9a-zA-Z.-]+")
           echo "Detected Release Version: $RELEASE_VERSION"
           echo "release_version=$RELEASE_VERSION" >> $GITHUB_OUTPUT
 
