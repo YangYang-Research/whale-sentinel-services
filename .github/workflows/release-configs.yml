@@ -29,3 +29,4 @@ jobs:
           tag_name: ${{ github.ref_name }}
           body: "Auto release of configuration files"
           files: ${{ env.RELEASE_FILE }}
+          token: ${{ secrets.GH_PAT }}
