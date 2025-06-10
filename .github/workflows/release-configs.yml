@@ -27,5 +27,3 @@ jobs:
           tag_name: ${{ github.ref_name }}
           body: "Auto release of configuration files"
           files: ${{ env.RELEASE_FILE }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
