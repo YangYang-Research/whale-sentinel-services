@@ -10,7 +10,8 @@ jobs:
     name: Extract Release Info from Submodules
     runs-on: ubuntu-latest
     outputs:
-      release_matrix: ${{ steps.extract.outputs.release_matrix }}
+      ready: ${{ steps.check.outputs.ready }}
+      build_matrix: ${{ steps.check.outputs.build_matrix }}
     steps:
       - name: Checkout repo with submodules
         uses: actions/checkout@v3
@@ -18,8 +19,8 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Extract release versions
-        id: extract
+      - name: Extract release info
+        id: check
         run: |
           set -e
 
@@ -31,70 +32,23 @@ jobs:
             [whale-sentinel-web-attack-detection]=web-attack-detection
           )
 
+          ALL_SUCCESS=true
           MATRIX_INCLUDE=()
 
           for DIR in "${!REPO_MAP[@]}"; do
             echo "\n🔍 Checking submodule $DIR"
 
-            # Lấy commit trong repo chính có cập nhật submodule
-            SUBMODULE_COMMIT=$(git log -n 1 --pretty=format:"%H" -- $DIR)
-            echo "🧾 Commit SHA in main repo: $SUBMODULE_COMMIT"
-
-            COMMIT_MSG=$(git log -1 --pretty=%B $SUBMODULE_COMMIT)
+            # Get submodule commit message from current repo
+            COMMIT_MSG=$(git log -1 --pretty=%B -- "$DIR")
+            echo "🧾 Commit message: $COMMIT_MSG"
 
             if [[ "$COMMIT_MSG" =~ Release:[[:space:]]*([0-9a-zA-Z.-]+) ]]; then
               VERSION="${BASH_REMATCH[1]}"
               echo "✅ Found release version: $VERSION"
-              
-              # Lấy actual SHA trong thư mục submodule
-              SUB_SHA=$(cd $DIR && git rev-parse HEAD)
-              MATRIX_INCLUDE+=("{\"name\":\"${DIR}\",\"version\":\"${VERSION}\",\"sha\":\"${SUB_SHA}\"}")
+              MATRIX_INCLUDE+=("{\"name\":\"$DIR\",\"version\":\"$VERSION\"}")
             else
               echo "⚠️ No Release: found in commit message. Skipping build."
-            fi
-          done
-
-
-          MATRIX_JSON=$(printf '[%s]' "$(IFS=,; echo "${MATRIX_INCLUDE[*]}")")
-          echo "release_matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
-
-  check-submodule-status:
-    name: Check Submodule CI Status
-    needs: extract-release-info
-    runs-on: ubuntu-latest
-    outputs:
-      ready: ${{ steps.check.outputs.ready }}
-      build_matrix: ${{ steps.check.outputs.build_matrix }}
-    steps:
-      - name: Filter successful CI submodules
-        id: check
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_MATRIX: '${{ needs.extract-release-info.outputs.release_matrix }}'
-        run: |
-          set -e
-
-          ALL_SUCCESS=true
-          MATRIX_INCLUDE=()
-
-          echo "$RELEASE_MATRIX" | jq -c '.[]' | while read entry; do
-            NAME=$(echo "$entry" | jq -r '.name')
-            VERSION=$(echo "$entry" | jq -r '.version')
-            SHA=$(echo "$entry" | jq -r '.sha')
-
-            echo "\n🔍 Checking CI status for $NAME with SHA $SHA"
-
-            API="https://api.github.com/repos/YangYang-Research/$NAME/actions/runs?per_page=10"
-            STATUS=$(curl -s -H "Authorization: token $GH_TOKEN" "$API" \
-              | jq -r --arg sha "$SHA" '.workflow_runs[] | select(.head_sha == $sha) | .conclusion' | head -n 1)
-
-            echo "🟢 Status for $NAME: $STATUS"
-
-            if [[ "$STATUS" != "success" ]]; then
-              echo "❌ CI not successful for $NAME"
               ALL_SUCCESS=false
-            else
-              MATRIX_INCLUDE+=("{\"name\":\"${NAME}\",\"version\":\"${VERSION}\"}")
             fi
           done
 
@@ -103,14 +57,68 @@ jobs:
           MATRIX_JSON=$(printf '[%s]' "$(IFS=,; echo "${MATRIX_INCLUDE[*]}")")
           echo "build_matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
 
+  check-submodule-status:
+    name: Check Submodule CI Status by Commit SHA
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - name: Checkout repo with submodules
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Check submodule workflow status
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+
+          declare -A REPO_MAP=(
+            [whale-sentinel-common-attack-detection]=common-attack-detection
+            [whale-sentinel-configuration-service]=configuration-service
+            [whale-sentinel-dga-detection]=dga-detection
+            [whale-sentinel-gateway-service]=gateway-service
+            [whale-sentinel-web-attack-detection]=web-attack-detection
+          )
+
+          ALL_SUCCESS=true
+
+          for DIR in "${!REPO_MAP[@]}"; do
+            echo "\n🔍 Checking CI status for $DIR"
+
+            SHA=$(git submodule status $DIR | awk '{print $1}' | sed 's/^-//')
+            echo "🔢 Commit SHA: $SHA"
+
+            API="https://api.github.com/repos/YangYang-Research/$DIR/actions/runs?per_page=10"
+            STATUS=$(curl -s -H "Authorization: token $GH_TOKEN" "$API" \
+              | jq -r --arg sha "$SHA" '.workflow_runs[] | select(.head_sha == $sha) | .conclusion' | head -n 1)
+
+            echo "🟢 Status for $DIR: $STATUS"
+
+            if [[ "$STATUS" != "success" ]]; then
+              echo "❌ CI not successful for $DIR"
+              ALL_SUCCESS=false
+            fi
+          done
+
+          echo "ready=$ALL_SUCCESS" >> $GITHUB_OUTPUT
+
   build-and-push:
     name: Build and Push Docker Images
-    needs: check-submodule-status
-    if: needs.check-submodule-status.outputs.ready == 'true' && needs.check-submodule-status.outputs.build_matrix != '[]'
+    needs:
+      - extract-release-info
+      - check-submodule-status
+    if: |
+      needs.extract-release-info.outputs.ready == 'true' &&
+      needs.check-submodule-status.outputs.ready == 'true' &&
+      needs.extract-release-info.outputs.build_matrix != '[]'
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        include: ${{ fromJson(needs.check-submodule-status.outputs.build_matrix) }}
+        include: ${{ fromJson(needs.extract-release-info.outputs.build_matrix) }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v3
