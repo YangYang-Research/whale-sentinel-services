@@ -6,12 +6,11 @@ on:
       - main
 
 jobs:
-  check-submodule-status:
-    name: Check Submodule CI Status by Commit SHA
+  extract-release-info:
+    name: Extract Release Info from Submodules
     runs-on: ubuntu-latest
     outputs:
-      ready: ${{ steps.check.outputs.ready }}
-      build_matrix: ${{ steps.check.outputs.build_matrix }}
+      release_matrix: ${{ steps.extract.outputs.release_matrix }}
     steps:
       - name: Checkout repo with submodules
         uses: actions/checkout@v3
@@ -19,10 +18,8 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Check submodule workflow status & build matrix
-        id: check
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract release versions
+        id: extract
         run: |
           set -e
 
@@ -34,38 +31,64 @@ jobs:
             [whale-sentinel-web-attack-detection]=web-attack-detection
           )
 
-          ALL_SUCCESS=true
           MATRIX_INCLUDE=()
 
           for DIR in "${!REPO_MAP[@]}"; do
             echo "\n🔍 Checking submodule $DIR"
 
-            # Get commit SHA from main repo
             SHA=$(git ls-tree HEAD $DIR | awk '{print $3}')
             echo "🧾 Commit SHA from main repo: $SHA"
 
-            # Check commit message from main repo for submodule SHA
             COMMIT_MSG=$(git log -1 --pretty=%B $SHA)
             if [[ "$COMMIT_MSG" =~ Release:[[:space:]]*([0-9a-zA-Z.-]+) ]]; then
               VERSION="${BASH_REMATCH[1]}"
               echo "✅ Found release version: $VERSION"
+              MATRIX_INCLUDE+=("{\"name\":\"${DIR}\",\"version\":\"${VERSION}\",\"sha\":\"${SHA}\"}")
             else
-              echo "⚠️ No Release: found in commit message. Skipping build."
-              continue
+              echo "⚠️ No Release: found in commit message. Skipping."
             fi
+          done
 
-            # Check CI status from submodule repo using commit SHA
-            API="https://api.github.com/repos/YangYang-Research/$DIR/actions/runs?per_page=10"
+          MATRIX_JSON=$(printf '[%s]' "$(IFS=,; echo "${MATRIX_INCLUDE[*]}")")
+          echo "release_matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
+
+  check-submodule-status:
+    name: Check Submodule CI Status
+    needs: extract-release-info
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+      build_matrix: ${{ steps.check.outputs.build_matrix }}
+    steps:
+      - name: Filter successful CI submodules
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_MATRIX: '${{ needs.extract-release-info.outputs.release_matrix }}'
+        run: |
+          set -e
+
+          ALL_SUCCESS=true
+          MATRIX_INCLUDE=()
+
+          echo "$RELEASE_MATRIX" | jq -c '.[]' | while read entry; do
+            NAME=$(echo "$entry" | jq -r '.name')
+            VERSION=$(echo "$entry" | jq -r '.version')
+            SHA=$(echo "$entry" | jq -r '.sha')
+
+            echo "\n🔍 Checking CI status for $NAME with SHA $SHA"
+
+            API="https://api.github.com/repos/YangYang-Research/$NAME/actions/runs?per_page=10"
             STATUS=$(curl -s -H "Authorization: token $GH_TOKEN" "$API" \
               | jq -r --arg sha "$SHA" '.workflow_runs[] | select(.head_sha == $sha) | .conclusion' | head -n 1)
 
-            echo "🟢 Status for $DIR: $STATUS"
+            echo "🟢 Status for $NAME: $STATUS"
 
             if [[ "$STATUS" != "success" ]]; then
-              echo "❌ CI not successful for $DIR"
+              echo "❌ CI not successful for $NAME"
               ALL_SUCCESS=false
             else
-              MATRIX_INCLUDE+=("{\"name\":\"${DIR}\",\"version\":\"${VERSION}\"}")
+              MATRIX_INCLUDE+=("{\"name\":\"${NAME}\",\"version\":\"${VERSION}\"}")
             fi
           done
 
