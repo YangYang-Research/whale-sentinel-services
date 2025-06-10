@@ -1,0 +1,31 @@
+name: Release Config Packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set release file name
+        id: vars
+        run: echo "RELEASE_FILE=whale-sentinel-configs-${GITHUB_REF_NAME}.zip" >> $GITHUB_ENV
+
+      - name: Zip config folders
+        run: zip -r "$RELEASE_FILE" fluent-bit redis
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Release ${{ github.ref_name }}"
+          tag_name: ${{ github.ref_name }}
+          body: "Auto release of configuration files"
+          files: ${{ env.RELEASE_FILE }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
