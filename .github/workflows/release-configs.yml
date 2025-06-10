@@ -51,7 +51,7 @@ jobs:
       - name: Zip configuration folders
         run: |
           VERSION="${{ needs.check-release-version.outputs.release_version }}"
-          ZIP_NAME="whale-sentinel-configs-${VERSION}.zip"
+          ZIP_NAME="whale-sentinel-services-${VERSION}.zip"
 
           echo "📦 Creating $ZIP_NAME..."
           zip -r "$ZIP_NAME" fluent-bit redis
