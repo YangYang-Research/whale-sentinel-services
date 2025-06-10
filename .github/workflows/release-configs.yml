@@ -1,26 +1,36 @@
-name: Release Config Packages
+name: Release Configs
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*-config'
 
 jobs:
-  build-and-release:
+  release:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-  
+    env:
+      RELEASE_FILE: whale-sentinel-configs-${{ github.ref_name }}.zip
+
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set release file name
-        id: vars
-        run: echo "RELEASE_FILE=whale-sentinel-configs-${GITHUB_REF_NAME}.zip" >> $GITHUB_ENV
+      - name: Zip config files
+        run: |
+          zip -r "$RELEASE_FILE" fluent-bit redis
+          ls -lh "$RELEASE_FILE"
 
-      - name: Zip config folders
-        run: zip -r "$RELEASE_FILE" fluent-bit redis
+      - name: Check release file
+        run: |
+          if [ -f "$RELEASE_FILE" ]; then
+            echo "✅ File exists"
+            ls -lh "$RELEASE_FILE"
+          else
+            echo "❌ File not found"
+            exit 1
+          fi
+
+      - name: Wait to ensure file flush
+        run: sleep 2
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
