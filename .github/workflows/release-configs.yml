@@ -3,7 +3,7 @@ name: Release Configs
 on:
   push:
     branches:
-      - main  # hoặc branch bạn muốn theo dõi
+      - main  # hoặc branch bạn dùng
 
 jobs:
   check-release-version:
@@ -11,13 +11,14 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       should_proceed: ${{ steps.check.outputs.should_proceed }}
+      release_version: ${{ steps.check.outputs.release_version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
         with:
           fetch-depth: 2
 
-      - name: Check commit message
+      - name: Check commit message and extract version
         id: check
         run: |
           echo "🔍 Checking last commit message..."
@@ -25,11 +26,16 @@ jobs:
           COMMIT_MSG=$(git log -1 --pretty=%B)
           echo "📝 Commit message: $COMMIT_MSG"
 
-          if echo "$COMMIT_MSG" | grep -q "Release:"; then
+          if echo "$COMMIT_MSG" | grep -qE "Release:\s*v[0-9a-zA-Z._-]+"; then
             echo "✅ Found 'Release:' in commit message."
+
+            VERSION=$(echo "$COMMIT_MSG" | grep -oE "Release:\s*v[0-9a-zA-Z._-]+" | sed 's/Release:\s*//')
+            echo "📦 Extracted version: $VERSION"
+
             echo "should_proceed=true" >> $GITHUB_OUTPUT
+            echo "release_version=$VERSION" >> $GITHUB_OUTPUT
           else
-            echo "⛔ No 'Release:' found. Skipping workflow."
+            echo "⛔ No valid 'Release:' found. Skipping workflow."
             echo "should_proceed=false" >> $GITHUB_OUTPUT
           fi
 
@@ -42,15 +48,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Create zip file
+      - name: Zip configuration folders
         run: |
-          ZIP_NAME=whale-sentinel-configs-${{ github.sha }}.zip
-          zip -r $ZIP_NAME fluent-bit redis
-          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
-          ls -lh $ZIP_NAME
+          VERSION="${{ needs.check-release-version.outputs.release_version }}"
+          ZIP_NAME="whale-sentinel-configs-${VERSION}.zip"
 
-      - name: Upload artifact
+          echo "📦 Creating $ZIP_NAME..."
+          zip -r "$ZIP_NAME" fluent-bit redis
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+
+      - name: Upload zip as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: whale-sentinel-configs
+          name: whale-sentinel-configs-${{ needs.check-release-version.outputs.release_version }}
           path: ${{ env.ZIP_NAME }}
+          # retention-days: 5
