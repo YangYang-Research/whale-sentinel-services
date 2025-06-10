@@ -1,9 +1,9 @@
-name: Release Configs
+name: Release Whale Sentinel Services
 
 on:
   push:
     branches:
-      - main  # hoặc branch bạn dùng
+      - main
 
 jobs:
   check-release-version:
@@ -54,7 +54,7 @@ jobs:
           ZIP_NAME="whale-sentinel-services-${VERSION}.zip"
 
           echo "📦 Creating $ZIP_NAME..."
-          zip -r "$ZIP_NAME" fluent-bit redis
+          zip -r "$ZIP_NAME" fluent-bit redis docker-compose.example.yml
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
 
       - name: Upload zip as artifact
