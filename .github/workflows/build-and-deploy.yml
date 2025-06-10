@@ -6,8 +6,8 @@ on:
       - main
 
 jobs:
-  check-submodule-status:
-    name: Check Submodule CI Status by Commit SHA
+  extract-release-info:
+    name: Extract Release Info from Submodules
     runs-on: ubuntu-latest
     outputs:
       ready: ${{ steps.check.outputs.ready }}
@@ -19,10 +19,8 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Check submodule workflow status & build matrix
+      - name: Extract release info
         id: check
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
 
@@ -40,19 +38,59 @@ jobs:
           for DIR in "${!REPO_MAP[@]}"; do
             echo "\n🔍 Checking submodule $DIR"
 
-            git submodule update --init --recursive
-            SHA=$(cd $DIR && git rev-parse HEAD)
-            echo "🧾 Commit SHA: $SHA"
+            # Get submodule commit message from current repo
+            COMMIT_MSG=$(git log -1 --pretty=%B -- "$DIR")
+            echo "🧾 Commit message: $COMMIT_MSG"
 
-            # Check commit message for "Release: <version>"
-            COMMIT_MSG=$(git log -1 --pretty=%B $SHA)
             if [[ "$COMMIT_MSG" =~ Release:[[:space:]]*([0-9a-zA-Z.-]+) ]]; then
               VERSION="${BASH_REMATCH[1]}"
               echo "✅ Found release version: $VERSION"
+              MATRIX_INCLUDE+=("{\"name\":\"$DIR\",\"version\":\"$VERSION\"}")
             else
               echo "⚠️ No Release: found in commit message. Skipping build."
-              continue
+              ALL_SUCCESS=false
             fi
+          done
+
+          echo "ready=$ALL_SUCCESS" >> $GITHUB_OUTPUT
+
+          MATRIX_JSON=$(printf '[%s]' "$(IFS=,; echo "${MATRIX_INCLUDE[*]}")")
+          echo "build_matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
+
+  check-submodule-status:
+    name: Check Submodule CI Status by Commit SHA
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - name: Checkout repo with submodules
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Check submodule workflow status
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+
+          declare -A REPO_MAP=(
+            [whale-sentinel-common-attack-detection]=common-attack-detection
+            [whale-sentinel-configuration-service]=configuration-service
+            [whale-sentinel-dga-detection]=dga-detection
+            [whale-sentinel-gateway-service]=gateway-service
+            [whale-sentinel-web-attack-detection]=web-attack-detection
+          )
+
+          ALL_SUCCESS=true
+
+          for DIR in "${!REPO_MAP[@]}"; do
+            echo "\n🔍 Checking CI status for $DIR"
+
+            SHA=$(git submodule status $DIR | awk '{print $1}' | sed 's/^-//')
+            echo "🔢 Commit SHA: $SHA"
 
             API="https://api.github.com/repos/YangYang-Research/$DIR/actions/runs?per_page=10"
             STATUS=$(curl -s -H "Authorization: token $GH_TOKEN" "$API" \
@@ -63,34 +101,42 @@ jobs:
             if [[ "$STATUS" != "success" ]]; then
               echo "❌ CI not successful for $DIR"
               ALL_SUCCESS=false
-            else
-              MATRIX_INCLUDE+=("{\"name\":\"${DIR}\",\"version\":\"${VERSION}\"}")
             fi
           done
 
           echo "ready=$ALL_SUCCESS" >> $GITHUB_OUTPUT
 
-          MATRIX_JSON=$(printf '[%s]' "$(IFS=,; echo "${MATRIX_INCLUDE[*]}")")
-          echo "build_matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
-
   build-and-push:
     name: Build and Push Docker Images
-    needs: check-submodule-status
-    if: needs.check-submodule-status.outputs.ready == 'true'
+    needs:
+      - extract-release-info
+      - check-submodule-status
+    if: |
+      needs.extract-release-info.outputs.ready == 'true' &&
+      needs.check-submodule-status.outputs.ready == 'true' &&
+      needs.extract-release-info.outputs.build_matrix != '[]'
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        include: ${{ fromJson(needs.check-submodule-status.outputs.build_matrix) }}
+        include: ${{ fromJson(needs.extract-release-info.outputs.build_matrix) }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v3
         with:
           submodules: recursive
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
       - name: Log in to Amazon ECR Public
         uses: aws-actions/amazon-ecr-login@v1
         with:
           registry-type: public
+          mask-password: true
 
       - name: Build and Push Docker Image
         env:
