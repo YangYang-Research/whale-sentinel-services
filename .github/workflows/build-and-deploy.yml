@@ -37,15 +37,16 @@ jobs:
           ALL_SUCCESS=true
           MATRIX_INCLUDE=()
 
+          git submodule update --init --recursive
+
           for DIR in "${!REPO_MAP[@]}"; do
             echo "\n🔍 Checking submodule $DIR"
 
-            git submodule update --init --recursive
             SHA=$(cd $DIR && git rev-parse HEAD)
             echo "🧾 Commit SHA: $SHA"
 
-            # Check commit message for "Release: <version>"
-            COMMIT_MSG=$(git log -1 --pretty=%B $SHA)
+            # ✅ Correct: Run inside the submodule
+            COMMIT_MSG=$(cd $DIR && git log -1 --pretty=%B)
             if [[ "$COMMIT_MSG" =~ Release:[[:space:]]*([0-9a-zA-Z.-]+) ]]; then
               VERSION="${BASH_REMATCH[1]}"
               echo "✅ Found release version: $VERSION"
