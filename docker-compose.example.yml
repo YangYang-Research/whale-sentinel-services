@@ -2,9 +2,6 @@ version: '3.8'
 
 services:
   whale-sentinel-gateway-service:
-    build: # Uncomment this line to build the image from the Dockerfile
-      context: .
-      dockerfile: whale-sentinel-gateway-service/Dockerfile
     container_name: whale-sentinel-gateway-service
     restart: always
     image: whale-sentinel/whale-sentinel-services/whale-sentinel-gateway-service:latest
@@ -38,14 +35,11 @@ services:
       - whale-sentinel-service-network
 
   whale-sentinel-configuration-service:
-    build: # Uncomment this line to build the image from the Dockerfile
-      context: .
-      dockerfile: whale-sentinel-configuration-service/Dockerfile
     container_name: whale-sentinel-configuration-service
     restart: always
     image: whale-sentinel/whale-sentinel-services/whale-sentinel-configuration-service:latest
     ports:
-      - "5004:443" # Uncomment this line to expose the service on port 5004
+      - "5004:443"
     environment:
       AWS_REGION: your-aws-region
       AWS_ACCESS_KEY_ID: your-aws-access-key
@@ -53,7 +47,7 @@ services:
       AWS_SECRET_NAME: your-whale-sentinel-secret-name
       WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME: your-whale-sentinel-secret-key-name
       WHALE_SENTINEL_CONTROLLER_SECRET_KEY_NAME: your-whale-sentinel-secret-key-name
-      WS_CONTROLLER_PROCESSOR_URL: http://127.0.0.1:8000
+      WS_CONTROLLER_PROCESSOR_URL: your-whale-sentinel-mdp-url
       WS_CONTROLLER_PROCESSOR_ENDPOINT: /api/v1/ws/controllers/processor
       LOG_MAX_SIZE: 10000000
       LOG_MAX_BACKUPS: 3
@@ -68,14 +62,9 @@ services:
       - whale-sentinel-service-network
 
   whale-sentinel-web-attack-detection:
-    build: # Uncomment this line to build the image from the Dockerfile
-      context: .
-      dockerfile: whale-sentinel-web-attack-detection/Dockerfile
     container_name: whale-sentinel-web-attack-detection
     restart: always
     image: whale-sentinel/whale-sentinel-services/whale-sentinel-web-attack-detection:latest
-    # ports:
-    #   - "5001:443" # Uncomment this line to expose the service on port 5001
     environment:
       AWS_REGION: your-aws-region
       AWS_ACCESS_KEY_ID: your-aws-access-key
@@ -90,14 +79,9 @@ services:
       - whale-sentinel-service-network
   
   whale-sentinel-dga-detection:
-    build: # Uncomment this line to build the image from the Dockerfile
-      context: .
-      dockerfile: whale-sentinel-dga-detection/Dockerfile
     container_name: whale-sentinel-dga-detection
     restart: always
     image: whale-sentinel/whale-sentinel-services/whale-sentinel-dga-detection:latest
-    # ports:
-    #   - "5002:443" # Uncomment this line to expose the service on port 5002
     environment:
       AWS_REGION: your-aws-region
       AWS_ACCESS_KEY_ID: your-aws-access-key
@@ -112,14 +96,9 @@ services:
       - whale-sentinel-service-network
   
   whale-sentinel-common-attack-detection:
-    build: # Uncomment this line to build the image from the Dockerfile
-      context: .
-      dockerfile: whale-sentinel-common-attack-detection/Dockerfile
     container_name: whale-sentinel-common-attack-detection
     restart: always
     image: whale-sentinel/whale-sentinel-services/whale-sentinel-common-attack-detection:latest
-    # ports:
-    #   - "5003:443" # Uncomment this line to expose the service on port 5003
     environment:
       AWS_REGION: your-aws-region
       AWS_ACCESS_KEY_ID: your-aws-access-key
@@ -139,8 +118,6 @@ services:
     image: redis:7.2
     container_name: whale-sentinel-redis-cache
     restart: always
-    # ports:
-    #   - "6379:6379" # Uncomment this line to expose the service on port 6379
     volumes:
       - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
@@ -157,14 +134,13 @@ services:
       - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
       - ./fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf:ro
     environment:
-      - OPENSEARCH_ENDPOINT=your-opensearch-endpoint
-      - OPENSEARCH_USERNAME=admin
-      - OPENSEARCH_PASSWORD=your-opensearch-password
+      OPENSEARCH_ENDPOINT: your-opensearch-endpoint
+      OPENSEARCH_USERNAME: your-opensearch-username
+      OPENSEARCH_PASSWORD: your-opensearch-password
     ports:
-      - "24224:24224"  # Fluent Bit input port
+      - "24224:24224"
     networks:
       - whale-sentinel-service-network
-      # - ws-opensearch_whale-sentinel-controller-network # Uncomment this line if you want to connect Fluent Bit to the OpenSearch network
     depends_on:
       - whale-sentinel-gateway-service
       - whale-sentinel-web-attack-detection
@@ -181,6 +157,3 @@ networks:
     ipam:
       config:
         - subnet: "172.25.0.0/16"
-  # ws-opensearch_whale-sentinel-controller-network: # This network is used for communication between the controller and the services when running on the same host
-  #   external: true
-  #   name: ws-opensearch_whale-sentinel-controller-network
