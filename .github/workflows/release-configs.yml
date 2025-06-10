@@ -3,7 +3,7 @@ name: Release Configs
 on:
   push:
     branches:
-      - main
+      - main  # hoặc branch bạn muốn theo dõi
 
 jobs:
   check-release-version:
@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       should_proceed: ${{ steps.check.outputs.should_proceed }}
-      release_version: ${{ steps.extract_version.outputs.release_version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -34,40 +33,24 @@ jobs:
             echo "should_proceed=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Extract Release Version
-        id: extract_version
-        run: |
-          RELEASE_VERSION=$(echo "$COMMIT_MSG" | grep -oE "Release:\s*[0-9a-zA-Z.-]+")
-          echo "Detected Release Version: $RELEASE_VERSION"
-          echo "release_version=$RELEASE_VERSION" >> $GITHUB_OUTPUT
-
-  release:
-    name: Package and Upload Configs
-    runs-on: ubuntu-latest
+  zip-configs:
+    name: Zip fluent-bit & redis folders
     needs: check-release-version
     if: needs.check-release-version.outputs.should_proceed == 'true'
-    env:
-      RELEASE_FILE: whale-sentinel-configs-${{ needs.check-release-version.outputs.release_version }}.zip
-
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Zip config files
+      - name: Create zip file
         run: |
-          zip -r "$RELEASE_FILE" fluent-bit redis
-          ls -lh "$RELEASE_FILE"
+          ZIP_NAME=whale-sentinel-configs-${{ github.sha }}.zip
+          zip -r $ZIP_NAME fluent-bit redis
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+          ls -lh $ZIP_NAME
 
-      - name: Check release file
-        run: |
-          if [ -f "$RELEASE_FILE" ]; then
-            echo "✅ File exists"
-          else
-            echo "❌ File not found"
-            exit 1
-          fi
-
-      - name: Upload artifact for download
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.RELEASE_FILE }}
-          path: ${{ env.RELEASE_FILE }}
+          name: whale-sentinel-configs
+          path: ${{ env.ZIP_NAME }}
