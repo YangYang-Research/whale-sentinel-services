@@ -36,22 +36,24 @@ jobs:
           for DIR in "${!REPO_MAP[@]}"; do
             echo "\n🔍 Checking submodule $DIR"
 
-              cd "$DIR"
-              SHA=$(git rev-parse HEAD)
-              echo "🧾 Commit SHA in submodule: $SHA"
+            # Lấy commit trong repo chính có cập nhật submodule
+            SUBMODULE_COMMIT=$(git log -n 1 --pretty=format:"%H" -- $DIR)
+            echo "🧾 Commit SHA in main repo: $SUBMODULE_COMMIT"
 
-              # Lấy commit message từ repo submodule
-              COMMIT_MSG=$(git log -1 --pretty=%B)
-              cd - > /dev/null
+            COMMIT_MSG=$(git log -1 --pretty=%B $SUBMODULE_COMMIT)
 
-              if [[ "$COMMIT_MSG" =~ Release:[[:space:]]*([0-9a-zA-Z.-]+) ]]; then
-                VERSION="${BASH_REMATCH[1]}"
-                echo "✅ Found release version: $VERSION"
-                MATRIX_INCLUDE+=("{\"name\":\"${DIR}\",\"version\":\"${VERSION}\",\"sha\":\"${SHA}\"}")
-              else
-                echo "⚠️ No Release: found in commit message. Skipping build."
-              fi
-            done
+            if [[ "$COMMIT_MSG" =~ Release:[[:space:]]*([0-9a-zA-Z.-]+) ]]; then
+              VERSION="${BASH_REMATCH[1]}"
+              echo "✅ Found release version: $VERSION"
+              
+              # Lấy actual SHA trong thư mục submodule
+              SUB_SHA=$(cd $DIR && git rev-parse HEAD)
+              MATRIX_INCLUDE+=("{\"name\":\"${DIR}\",\"version\":\"${VERSION}\",\"sha\":\"${SUB_SHA}\"}")
+            else
+              echo "⚠️ No Release: found in commit message. Skipping build."
+            fi
+          done
+
 
           MATRIX_JSON=$(printf '[%s]' "$(IFS=,; echo "${MATRIX_INCLUDE[*]}")")
           echo "release_matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
