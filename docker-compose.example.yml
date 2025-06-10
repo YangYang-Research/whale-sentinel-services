@@ -4,7 +4,7 @@ services:
   whale-sentinel-gateway-service:
     container_name: whale-sentinel-gateway-service
     restart: always
-    image: whale-sentinel/whale-sentinel-services/whale-sentinel-gateway-service:latest
+    image: public.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-gateway-service:latest
     ports:
       - "5000:443"
     environment:
@@ -37,7 +37,7 @@ services:
   whale-sentinel-configuration-service:
     container_name: whale-sentinel-configuration-service
     restart: always
-    image: whale-sentinel/whale-sentinel-services/whale-sentinel-configuration-service:latest
+    image: public.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-configuration-service:latest
     ports:
       - "5004:443"
     environment:
@@ -64,7 +64,7 @@ services:
   whale-sentinel-web-attack-detection:
     container_name: whale-sentinel-web-attack-detection
     restart: always
-    image: whale-sentinel/whale-sentinel-services/whale-sentinel-web-attack-detection:latest
+    image: public.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-web-attack-detection:latest
     environment:
       AWS_REGION: your-aws-region
       AWS_ACCESS_KEY_ID: your-aws-access-key
@@ -81,7 +81,7 @@ services:
   whale-sentinel-dga-detection:
     container_name: whale-sentinel-dga-detection
     restart: always
-    image: whale-sentinel/whale-sentinel-services/whale-sentinel-dga-detection:latest
+    image: public.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-dga-detection:latest
     environment:
       AWS_REGION: your-aws-region
       AWS_ACCESS_KEY_ID: your-aws-access-key
@@ -98,7 +98,7 @@ services:
   whale-sentinel-common-attack-detection:
     container_name: whale-sentinel-common-attack-detection
     restart: always
-    image: whale-sentinel/whale-sentinel-services/whale-sentinel-common-attack-detection:latest
+    image: public.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-common-attack-detection:latest
     environment:
       AWS_REGION: your-aws-region
       AWS_ACCESS_KEY_ID: your-aws-access-key
@@ -126,7 +126,7 @@ services:
 
   whale-sentinel-fluent-bit:
     image: fluent/fluent-bit:4.0
-    container_name: fluent-bit
+    container_name: whale-sentinel-fluent-bit
     restart: always
     volumes:
       - /var/log/whale-sentinel:/var/log/whale-sentinel:ro
