@@ -1,59 +1,77 @@
-name: Build & Push Docker Images on PR Merge
+name: Build and Deploy Docker Images
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches:
       - main
 
 jobs:
-  build-and-push:
-    if: github.event.pull_request.merged == true
+  detect-changes:
+    name: Detect Changed Submodules
     runs-on: ubuntu-latest
-
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-    - name: Checkout repo
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - name: Checkout repo with history and submodules
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: true
 
-    - name: Extract version from PR description
-      id: extract_version
-      run: |
-        DESCRIPTION="${{ github.event.pull_request.body }}"
-        VERSION=$(echo "$DESCRIPTION" | grep -i '^Version:' | sed -E 's/Version:\s*//i')
-        if [[ -z "$VERSION" ]]; then
-          echo "❌ No 'Version:' tag found in PR description."
-          exit 1
-        fi
-        echo "VERSION_TAG=$VERSION" >> $GITHUB_ENV
-        echo "✅ Found version: $VERSION"
+      - name: Fetch dev branch for comparison
+        run: git fetch origin dev
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1
+      - name: Detect changed submodules and versions
+        id: set-matrix
+        run: |
+          echo "{" > matrix.json
+          echo '"include": [' >> matrix.json
 
-    - name: Login to Amazon ECR Public
-      uses: aws-actions/amazon-ecr-login@v2
-      with:
-        registry-type: public
+          FIRST=true
+          for dir in whale-sentinel-*; do
+            if git diff --name-only origin/dev..HEAD -- "$dir" | grep -q .; then
+              VERSION=$(git log origin/dev..HEAD --pretty=format:%s -- "$dir" | grep -i 'Release:' | tail -n1 | sed -E 's/.*Release:[ ]*//I')
+              if [ -n "$VERSION" ]; then
+                [ "$FIRST" = false ] && echo "," >> matrix.json
+                FIRST=false
+                echo "  {\"module\": \"$dir\", \"version\": \"$VERSION\"}" >> matrix.json
+              fi
+            fi
+          done
 
-    - name: Get changed submodules from dev to main
-      id: changed
-      run: |
-        git fetch origin dev
-        echo "CHANGED_DIRS=$(git diff --name-only origin/main...origin/dev | grep '^whale-sentinel-' | cut -d/ -f1 | sort -u | xargs)" >> $GITHUB_ENV
+          echo "]}" >> matrix.json
+          echo "Detected matrix:"
+          cat matrix.json
+          echo "matrix=$(cat matrix.json | jq -c)" >> $GITHUB_OUTPUT
 
-    - name: Build & Push Docker Images
-      run: |
-        for dir in $CHANGED_DIRS; do
-          IMAGE_NAME="public.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/$dir"
-          echo "🛠️ Building $dir -> $IMAGE_NAME"
+  build-and-push:
+    name: Build and Push ${{ matrix.module }}
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+      fail-fast: false
+    steps:
+      - name: Checkout repo with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: true
 
-          docker build -t $IMAGE_NAME:latest -t $IMAGE_NAME:${VERSION_TAG} ./$dir
-          docker push $IMAGE_NAME:latest
-          docker push $IMAGE_NAME:${VERSION_TAG}
-        done
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Amazon ECR Public
+        run: |
+          aws ecr-public get-login-password --region us-east-1 | \
+          docker login --username AWS --password-stdin public.ecr.aws
+
+      - name: Build and push Docker image
+        run: |
+          IMAGE_BASE="public.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/${{ matrix.module }}"
+          VERSION="${{ matrix.version }}"
+
+          echo "Building image $IMAGE_BASE:$VERSION"
+
+          docker build -t "$IMAGE_BASE:$VERSION" -t "$IMAGE_BASE:latest" "./${{ matrix.module }}"
+          docker push "$IMAGE_BASE:$VERSION"
+          docker push "$IMAGE_BASE:latest"
