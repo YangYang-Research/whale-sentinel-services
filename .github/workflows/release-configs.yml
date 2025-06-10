@@ -1,31 +1,65 @@
-name: Release Config Packages
+name: Release Configs
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main  # hoặc branch bạn dùng
 
 jobs:
-  build-and-release:
+  check-release-version:
+    name: Check for "Release:" in commit message
     runs-on: ubuntu-latest
-
+    outputs:
+      should_proceed: ${{ steps.check.outputs.should_proceed }}
+      release_version: ${{ steps.check.outputs.release_version }}
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
-
-      - name: Set release file name
-        id: vars
-        run: echo "RELEASE_FILE=whale-sentinel-configs-${GITHUB_REF_NAME}.zip" >> $GITHUB_ENV
-
-      - name: Zip config folders
-        run: zip -r "$RELEASE_FILE" fluent-bit redis
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Checkout
+        uses: actions/checkout@v3
         with:
-          name: "Release ${{ github.ref_name }}"
-          tag_name: ${{ github.ref_name }}
-          body: "Auto release of configuration files"
-          files: ${{ env.RELEASE_FILE }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 2
+
+      - name: Check commit message and extract version
+        id: check
+        run: |
+          echo "🔍 Checking last commit message..."
+
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          echo "📝 Commit message: $COMMIT_MSG"
+
+          if echo "$COMMIT_MSG" | grep -qE "Release:\s*v[0-9a-zA-Z._-]+"; then
+            echo "✅ Found 'Release:' in commit message."
+
+            VERSION=$(echo "$COMMIT_MSG" | grep -oE "Release:\s*v[0-9a-zA-Z._-]+" | sed 's/Release:\s*//')
+            echo "📦 Extracted version: $VERSION"
+
+            echo "should_proceed=true" >> $GITHUB_OUTPUT
+            echo "release_version=$VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "⛔ No valid 'Release:' found. Skipping workflow."
+            echo "should_proceed=false" >> $GITHUB_OUTPUT
+          fi
+
+  zip-configs:
+    name: Zip fluent-bit & redis folders
+    needs: check-release-version
+    if: needs.check-release-version.outputs.should_proceed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Zip configuration folders
+        run: |
+          VERSION="${{ needs.check-release-version.outputs.release_version }}"
+          ZIP_NAME="whale-sentinel-services-${VERSION}.zip"
+
+          echo "📦 Creating $ZIP_NAME..."
+          zip -r "$ZIP_NAME" fluent-bit redis
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+
+      - name: Upload zip as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whale-sentinel-services-${{ needs.check-release-version.outputs.release_version }}
+          path: ${{ env.ZIP_NAME }}
+          # retention-days: 5
