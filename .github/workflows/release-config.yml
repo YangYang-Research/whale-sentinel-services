@@ -1,4 +1,4 @@
-name: Release Whale Sentinel Services Configuration
+name: Release Configuration
 
 on:
   push:
