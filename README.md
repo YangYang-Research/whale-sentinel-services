@@ -5,11 +5,11 @@
 
 | No. | Service | Language | Image |  Tag |
 | --- | -------- | ------- | ------- |  ----- |
-| 1 | whale-sentinel-common-attack-detection | Go1.24.0 | [whale-sentinel-common-attack-detection](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-common-attack-detection) |  0.1.0 |
-| 2 | whale-sentinel-configuration-service | Go1.24.0 | [whale-sentinel-configuration-service](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-configuration-service) | 0.1.0 |
-| 3 | whale-sentinel-dga-detection | Python3.12 | [whale-sentinel-dga-detection](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-dga-detection) | 0.1.0 |
-| 4 | whale-sentinel-web-attack-detection | Python3.12 | [whale-sentinel-web-attack-detection](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-web-attack-detection) | 0.1.0 |
-| 5 | whale-sentinel-gateway-service | Go1.24.0 | [whale-sentinel-gateway-service](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-gateway-service) | 0.1.0 |
+| 1 | whale-sentinel-common-attack-detection | Go1.24.0 | [whale-sentinel-common-attack-detection](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-common-attack-detection) |  0.1.1 |
+| 2 | whale-sentinel-configuration-service | Go1.24.0 | [whale-sentinel-configuration-service](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-configuration-service) | 0.1.1 |
+| 3 | whale-sentinel-dga-detection | Python3.12 | [whale-sentinel-dga-detection](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-dga-detection) | 0.1.1 |
+| 4 | whale-sentinel-web-attack-detection | Python3.12 | [whale-sentinel-web-attack-detection](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-web-attack-detection) | 0.1.1 |
+| 5 | whale-sentinel-gateway-service | Go1.24.0 | [whale-sentinel-gateway-service](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-gateway-service) | 0.1.1 |
 
 # 🚀 Usage Guide
 
@@ -76,3 +76,6 @@
 
 - Run the following command to launch all services in the background: `docker-compose up -d`
 
+## Contributing
+
+## License
