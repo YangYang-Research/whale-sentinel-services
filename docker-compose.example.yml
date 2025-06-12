@@ -14,6 +14,7 @@ services:
       AWS_SECRET_NAME: your-whale-sentinel-secret-name
       WHALE_SENTINEL_AGENT_SECRET_KEY_NAME: your-whale-sentinel-secret-key-name
       WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME: your-whale-sentinel-secret-key-name
+      WHALE_SENTINEL_VERIFY_TLS: "true"
       WS_MODULE_WEB_ATTACK_DETECTION_URL: https://whale-sentinel-web-attack-detection
       WS_MODULE_WEB_ATTACK_DETECTION_ENDPOINT: /api/v1/ws/services/web-attack-detection
       WS_MODULE_DGA_DETECTION_URL: https://whale-sentinel-dga-detection
@@ -47,6 +48,7 @@ services:
       AWS_SECRET_NAME: your-whale-sentinel-secret-name
       WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME: your-whale-sentinel-secret-key-name
       WHALE_SENTINEL_CONTROLLER_SECRET_KEY_NAME: your-whale-sentinel-secret-key-name
+      WHALE_SENTINEL_VERIFY_TLS: "true"
       WS_CONTROLLER_PROCESSOR_URL: your-whale-sentinel-mdp-url
       WS_CONTROLLER_PROCESSOR_ENDPOINT: /api/v1/ws/controllers/processor
       LOG_MAX_SIZE: 10000000
@@ -71,6 +73,7 @@ services:
       AWS_SECRET_ACCESS_KEY: your-aws-secret-key
       AWS_SECRET_NAME: your-whale-sentinel-secret-name
       WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME: your-whale-sentinel-secret-key-name
+      WHALE_SENTINEL_VERIFY_TLS: "true"
       LOG_MAX_SIZE: 10000000
       LOG_MAX_BACKUPS: 3
     volumes:
@@ -88,6 +91,7 @@ services:
       AWS_SECRET_ACCESS_KEY: your-aws-secret-key
       AWS_SECRET_NAME: your-whale-sentinel-secret-name
       WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME: your-whale-sentinel-secret-key-name
+      WHALE_SENTINEL_VERIFY_TLS: "true"
       LOG_MAX_SIZE: 10000000
       LOG_MAX_BACKUPS: 3
     volumes:
@@ -105,6 +109,7 @@ services:
       AWS_SECRET_ACCESS_KEY: your-aws-secret-key
       AWS_SECRET_NAME: your-whale-sentinel-secret-name
       WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME: your-whale-sentinel-secret-key-name
+      WHALE_SENTINEL_VERIFY_TLS: "true"
       LOG_MAX_SIZE: 10000000
       LOG_MAX_BACKUPS: 3
       LOG_MAX_AGE: 30
