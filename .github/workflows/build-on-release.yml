@@ -175,10 +175,11 @@ jobs:
           echo "🔍 Checking image: $IMAGE_NAME:$VERSION"
           if docker manifest inspect "$IMAGE_NAME:$VERSION" > /dev/null 2>&1; then
             echo "⏩ Image $IMAGE_NAME:$VERSION already exists. Skipping build."
-            echo "skip_build=true" >> $GITHUB_OUTPUT
+            echo "skip_build=true" >> "$GITHUB_OUTPUT"
           else
             echo "✅ Image does not exist. Will proceed with build."
-            echo "skip_build=false" >> $GITHUB_OUTPUT
+            echo "skip_build=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build and Push Docker Image
         if: steps.check.outputs.skip_build == 'false'
