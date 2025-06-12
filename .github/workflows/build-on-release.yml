@@ -166,30 +166,30 @@ jobs:
           registry-type: public
           mask-password: true
 
-      - name: Check if Docker image version already exists
-        id: check-image
+      - name: Check if image version exists
+        id: check
         env:
           IMAGE_NAME: public.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/${{ matrix.name }}
           VERSION: ${{ matrix.version }}
         run: |
-          echo "🔍 Checking if $IMAGE_NAME:$VERSION exists in ECR..."
+          echo "🔍 Checking image: $IMAGE_NAME:$VERSION"
           if docker manifest inspect "$IMAGE_NAME:$VERSION" > /dev/null 2>&1; then
             echo "⏩ Image $IMAGE_NAME:$VERSION already exists. Skipping build."
             echo "skip_build=true" >> $GITHUB_OUTPUT
           else
-            echo "✅ Image $IMAGE_NAME:$VERSION does not exist. Proceeding."
+            echo "✅ Image does not exist. Will proceed with build."
             echo "skip_build=false" >> $GITHUB_OUTPUT
 
       - name: Build and Push Docker Image
-        if: steps.check-image.outputs.skip_build == 'false'
+        if: steps.check.outputs.skip_build == 'false'
         env:
           IMAGE_NAME: public.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/${{ matrix.name }}
           VERSION: ${{ matrix.version }}
         run: |
-          echo "🔧 Building $IMAGE_NAME with tags: $VERSION, latest"
+          echo "🔧 Building $IMAGE_NAME:$VERSION"
           docker build -t "$IMAGE_NAME:$VERSION" -t "$IMAGE_NAME:latest" "${{ matrix.name }}"
-
           echo "📦 Pushing $IMAGE_NAME:$VERSION"
           docker push "$IMAGE_NAME:$VERSION"
           docker push "$IMAGE_NAME:latest"
+
 
