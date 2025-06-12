@@ -26,10 +26,10 @@ jobs:
           COMMIT_MSG=$(git log -1 --pretty=%B)
           echo "📝 Commit message: $COMMIT_MSG"
 
-          if echo "$COMMIT_MSG" | grep -qE "Release:\s*v[0-9a-zA-Z._-]+"; then
+          if echo "$COMMIT_MSG" | grep -qE "Release:\s*[0-9a-zA-Z._-]+"; then
             echo "✅ Found 'Release:' in commit message."
 
-            VERSION=$(echo "$COMMIT_MSG" | grep -oE "Release:\s*v[0-9a-zA-Z._-]+" | sed 's/Release:\s*//')
+            VERSION=$(echo "$COMMIT_MSG" | grep -oE "Release:\s*[0-9a-zA-Z._-]+" | sed 's/Release:\s*//')
             echo "📦 Extracted version: $VERSION"
 
             echo "should_proceed=true" >> $GITHUB_OUTPUT
