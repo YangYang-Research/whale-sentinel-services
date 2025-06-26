@@ -9,6 +9,8 @@ jobs:
   check-release-version:
     name: Check for "Release:" in commit message
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       should_proceed: ${{ steps.check.outputs.should_proceed }}
       release_version: ${{ steps.check.outputs.release_version }}
@@ -44,22 +46,50 @@ jobs:
     needs: check-release-version
     if: needs.check-release-version.outputs.should_proceed == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      zip_path: ${{ steps.zip.outputs.zip_path }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Zip configuration folders
+        id: zip
         run: |
           VERSION="${{ needs.check-release-version.outputs.release_version }}"
           ZIP_NAME="whale-sentinel-services-${VERSION}.zip"
-
-          echo "📦 Creating $ZIP_NAME..."
           zip -r "$ZIP_NAME" fluent-bit redis docker-compose.example.yml README.md
-          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+          echo "zip_path=$ZIP_NAME" >> $GITHUB_OUTPUT
 
       - name: Upload zip as artifact
         uses: actions/upload-artifact@v4
         with:
           name: whale-sentinel-services-${{ needs.check-release-version.outputs.release_version }}
-          path: ${{ env.ZIP_NAME }}
-          # retention-days: 5
+          path: ${{ steps.zip.outputs.zip_path }}
+
+  create-release:
+    name: Create GitHub Release
+    needs: [check-release-version, zip-configs]
+    if: needs.check-release-version.outputs.should_proceed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download zipped artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: whale-sentinel-services-${{ needs.check-release-version.outputs.release_version }}
+          path: ./
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.check-release-version.outputs.release_version }}
+          name: Release ${{ needs.check-release-version.outputs.release_version }}
+          body: |
+            🔐 Whale Sentinel Services release ${{ needs.check-release-version.outputs.release_version }}
+            - Automatically generated from `main` branch.
+            - Includes configuration and deployment zip.
+          files: |
+            whale-sentinel-services-${{ needs.check-release-version.outputs.release_version }}.zip
