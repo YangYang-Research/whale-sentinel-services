@@ -1,81 +1,96 @@
-# Whale Sentinel Services
+# 🐋 Whale Sentinel Services
 
 [![Horusec Security Scan](https://github.com/YangYang-Research/whale-sentinel-services/actions/workflows/horusec-scan.yml/badge.svg?branch=main)](https://github.com/YangYang-Research/whale-sentinel-services/actions/workflows/horusec-scan.yml)
 [![CodeQL Advanced](https://github.com/YangYang-Research/whale-sentinel-services/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/YangYang-Research/whale-sentinel-services/actions/workflows/codeql.yml)
 
-| No. | Service | Language | Image |  Tag |
-| --- | -------- | ------- | ------- |  ----- |
-| 1 | whale-sentinel-common-attack-detection | Go1.24.0 | [whale-sentinel-common-attack-detection](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-common-attack-detection) |  0.1.2 |
-| 2 | whale-sentinel-configuration-service | Go1.24.0 | [whale-sentinel-configuration-service](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-configuration-service) | 0.1.2 |
-| 3 | whale-sentinel-dga-detection | Python3.12 | [whale-sentinel-dga-detection](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-dga-detection) | 0.1.2 |
-| 4 | whale-sentinel-web-attack-detection | Python3.12 | [whale-sentinel-web-attack-detection](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-web-attack-detection) | 0.1.2 |
-| 5 | whale-sentinel-gateway-service | Go1.24.0 | [whale-sentinel-gateway-service](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-gateway-service) | 0.1.2 |
+## 🔧 Overview
 
-# 🚀 Usage Guide
+**Whale Sentinel Services** is the centralized backend of the Whale Sentinel threat detection ecosystem. These microservices perform real-time threat detection, agent coordination, DGA analysis, and web attack inspection, enabling deep security observability and active protection for connected applications.
 
-## 🛠️ Preparation 
+---
 
-1. Create an IAM User
+## 🧩 Services & Images
 
-- Go to AWS IAM console and create a new IAM user.
+| No. | Service Name                              | Language   | Docker Image                                                                                                                  | Version |
+|-----|-------------------------------------------|------------|--------------------------------------------------------------------------------------------------------------------------------|---------|
+| 1   | `whale-sentinel-common-attack-detection`  | Go 1.24.0  | [Image](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-common-attack-detection)      | 0.1.2   |
+| 2   | `whale-sentinel-configuration-service`    | Go 1.24.0  | [Image](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-configuration-service)        | 0.1.2   |
+| 3   | `whale-sentinel-dga-detection`            | Python 3.12| [Image](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-dga-detection)                | 0.1.2   |
+| 4   | `whale-sentinel-web-attack-detection`     | Python 3.12| [Image](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-web-attack-detection)         | 0.1.2   |
+| 5   | `whale-sentinel-gateway-service`          | Go 1.24.0  | [Image](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-gateway-service)              | 0.1.2   |
 
-- Assign sufficient permissions for Secrets Manager, EC2, RDS.
+---
 
-- Generate and securely store the following credentials:
+## 🚀 Getting Started
 
-    - AWS_ACCESS_KEY_ID
+### 🛠️ Prerequisites
 
-    - AWS_SECRET_ACCESS_KEY
+1. **Create an IAM User**
+   - Go to AWS IAM console and create a user with permissions for Secrets Manager, EC2, and RDS.
+   - Generate and securely store:
+     - `AWS_ACCESS_KEY_ID`
+     - `AWS_SECRET_ACCESS_KEY`
 
-2. Create AWS Secret
+2. **Create a Secret in AWS Secrets Manager**
+   - Secret name: `AWS_SECRET_NAME`
+   - Keys to include:
+     - `WHALE_SENTINEL_AGENT_SECRET_KEY_NAME`
+     - `WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME`
+     - `WHALE_SENTINEL_CONTROLLER_SECRET_KEY_NAME`
 
-- In AWS Secrets Manager, create a new secret named: AWS_SECRET_NAME
+---
 
-- Create your key and secret for following keys:
+### 📦 Deployment Steps
 
-    - WHALE_SENTINEL_AGENT_SECRET_KEY_NAME
+#### 1. Download the Deployment Package
+- Visit the [Releases](https://github.com/YangYang-Research/whale-sentinel-services/releases) page.
+- Download the latest deployment package and extract it.
 
-    - WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME
+#### 2. Configure Docker Compose
+```bash
+mv docker-compose.example.yml docker-compose.yml
+```
+- *(Optional)* Update the default Redis password in `redis/redis.conf` and `docker-compose.yml`.
 
-    - WHALE_SENTINEL_CONTROLLER_SECRET_KEY_NAME
+#### 3. Replace Config Placeholders
 
-## 🚦 Starting Whale Sentinel Services
+Update the following values in `docker-compose.yml`, `fluent-bit.conf`, and `.env`:
 
-1. Download & Unzip the Latest Package Release for Deployment
+| Key | Description | Example |
+|-----|-------------|---------|
+| `AWS_REGION` | AWS deployment region | `us-west-2` |
+| `AWS_ACCESS_KEY_ID` | IAM access key | `AKIA...` |
+| `AWS_SECRET_ACCESS_KEY` | IAM secret key | `abc123...` |
+| `AWS_SECRET_NAME` | Secret name in Secrets Manager | `whale-prod-secret` |
+| `WHALE_SENTINEL_AGENT_SECRET_KEY_NAME` | Agent secret key field | `agent-secret-key` |
+| `WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME` | Service secret key field | `service-secret-key` |
+| `WHALE_SENTINEL_CONTROLLER_SECRET_KEY_NAME` | Controller secret key field | `controller-secret-key` |
+| `REDIS_PASSWORD` | Redis access password | `supersecurepass` |
+| `WS_CONTROLLER_PROCESSOR_URL` | Whale MDP endpoint URL | `http://controller:8080/processor` |
+| `OPENSEARCH_ENDPOINT` | OpenSearch endpoint | `https://search-xyz.us-west-2.es.amazonaws.com` |
+| `OPENSEARCH_USERNAME` | OpenSearch user | `admin` |
+| `OPENSEARCH_PASSWORD` | OpenSearch password | `password123` |
 
-- Navigate to the [Releases](https://github.com/YangYang-Research/whale-sentinel-services/releases) page.
+#### 4. Start All Services
 
-- Download the package in ##Package Release for Deployment and extract it.
+```bash
+docker-compose up -d
+```
 
-2. Configure the Docker Environment
+---
 
-- Rename the sample compose file: `mv docker-compose.example.yml docker-compose.yml`
+## 🤝 Contributing
 
-- (Recommended) Change the default Redis password in redis/redis.conf and update docker-compose.yml accordingly.
+We welcome contributions and feedback. Please fork the repository and open a pull request with your suggested changes.
 
-3. Apply Your Configuration
+---
 
-- Replace all placeholder values in docker-compose.yml and other config files (fluent-bit.conf, etc.) with your actual environment-specific values (e.g., AWS credentials, secret names, ports).
+## 📄 License
 
-| **Key**                                     | **Description**                                  | **Example / Placeholder**             |
-| ------------------------------------------- | ------------------------------------------------ | ------------------------------------- |
-| `AWS_REGION`                                | AWS region where services and secrets are hosted | `your-aws-region`                     |
-| `AWS_ACCESS_KEY_ID`                         | AWS access key ID                                | `your-aws-access-key`                 |
-| `AWS_SECRET_ACCESS_KEY`                     | AWS secret access key                            | `your-aws-secret-key`                 |
-| `AWS_SECRET_NAME`                           | Name of the secret in AWS Secrets Manager        | `your-whale-sentinel-secret-name`     |
-| `WHALE_SENTINEL_AGENT_SECRET_KEY_NAME`      | Key name for agent component in AWS secret       | `your-whale-sentinel-secret-key-name` |
-| `WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME`    | Key name for service component in AWS secret     | `your-whale-sentinel-secret-key-name` |
-| `WHALE_SENTINEL_CONTROLLER_SECRET_KEY_NAME` | Key name for controller component in AWS secret  | `your-whale-sentinel-secret-key-name` |
-| `REDIS_PASSWORD`                            | Password used to access Redis                    | `your-redis-password`                 |
-| `WS_CONTROLLER_PROCESSOR_URL`               | URL to Whale Sentinel MDP endpoint               | `your-whale-sentinel-mdp-url`         |
-| `OPENSEARCH_ENDPOINT`                       | Endpoint URL for OpenSearch                      | `your-opensearch-endpoint`            |
-| `OPENSEARCH_USERNAME`                       | OpenSearch username                              | `your-opensearch-username`            |
-| `OPENSEARCH_PASSWORD`                       | OpenSearch password                              | `your-opensearch-password`            |
+This project is licensed under the [MIT License](LICENSE).
 
-4. Start the Services
+---
 
-- Run the following command to launch all services in the background: `docker-compose up -d`
+## 🛡️ Security & Reporting
 
-## Contributing
-
-## License
+If you discover a vulnerability, please report it responsibly via GitHub Issues or contact the maintainers privately.
