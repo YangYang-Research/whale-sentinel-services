@@ -13,11 +13,11 @@
 
 | No. | Service Name                              | Language   | Docker Image                                                                                                                  | Version |
 |-----|-------------------------------------------|------------|--------------------------------------------------------------------------------------------------------------------------------|---------|
-| 1   | `whale-sentinel-common-attack-detection`  | Go 1.24.0  | [Image](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-common-attack-detection)      | 0.1.2   |
-| 2   | `whale-sentinel-configuration-service`    | Go 1.24.0  | [Image](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-configuration-service)        | 0.1.2   |
-| 3   | `whale-sentinel-dga-detection`            | Python 3.12| [Image](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-dga-detection)                | 0.1.2   |
-| 4   | `whale-sentinel-web-attack-detection`     | Python 3.12| [Image](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-web-attack-detection)         | 0.1.2   |
-| 5   | `whale-sentinel-gateway-service`          | Go 1.24.0  | [Image](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-gateway-service)              | 0.1.2   |
+| 1   | `whale-sentinel-common-attack-detection`  | Go 1.24.0  | [Image](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-common-attack-detection)      | 0.1.3   |
+| 2   | `whale-sentinel-configuration-service`    | Go 1.24.0  | [Image](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-configuration-service)        | 0.1.3   |
+| 3   | `whale-sentinel-dga-detection`            | Python 3.12| [Image](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-dga-detection)                | 0.1.3   |
+| 4   | `whale-sentinel-web-attack-detection`     | Python 3.12| [Image](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-web-attack-detection)         | 0.1.3   |
+| 5   | `whale-sentinel-gateway-service`          | Go 1.24.0  | [Image](https://gallery.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/whale-sentinel-gateway-service)              | 0.1.3   |
 
 ---
 
