@@ -1,2 +1,2 @@
 .DS_Store
-docker-compose.dev.yml
+docker-compose.services.dev.yml
