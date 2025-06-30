@@ -168,6 +168,7 @@ jobs:
       needs.extract-release-info.outputs.build_matrix != '[]'
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include: ${{ fromJson(needs.extract-release-info.outputs.build_matrix) }}
     steps:
@@ -221,6 +222,7 @@ jobs:
 
       - name: Build and Push Multi-Arch Docker Image
         if: steps.check.outputs.skip_build == 'false'
+        continue-on-error: true
         env:
           IMAGE_NAME: public.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/${{ matrix.name }}
           VERSION: ${{ matrix.version }}
