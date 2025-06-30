@@ -214,7 +214,6 @@ jobs:
         env:
           IMAGE_NAME: public.ecr.aws/j8d4r7c5/whale-sentinel/whale-sentinel-services/${{ matrix.name }}
           VERSION: ${{ matrix.version }}
-          PLATFORMS: ${{ steps.platform.outputs.platforms }}
         run: |
           echo "🔧 Building multi-arch $IMAGE_NAME:$VERSION for $PLATFORMS"
           docker buildx build \
