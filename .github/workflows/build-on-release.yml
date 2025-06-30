@@ -207,16 +207,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        
-      - name: Determine platforms
-        id: platform
-        run: |
-          SERVICE="${{ matrix.name }}"
-          if [[ "$SERVICE" == "whale-sentinel-dga-detection" || "$SERVICE" == "whale-sentinel-web-attack-detection" ]]; then
-            echo "platforms=linux/amd64,linux/arm64" >> "$GITHUB_OUTPUT"
-          else
-            echo "platforms=linux/amd64,linux/arm64,linux/arm/v7" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Build and Push Multi-Arch Docker Image
         if: steps.check.outputs.skip_build == 'false'
@@ -228,7 +218,7 @@ jobs:
         run: |
           echo "🔧 Building multi-arch $IMAGE_NAME:$VERSION for $PLATFORMS"
           docker buildx build \
-            --platform "$PLATFORMS" \
+            --platform linux/amd64,linux/arm64 \
             --push \
             -t "$IMAGE_NAME:$VERSION" \
             -t "$IMAGE_NAME:latest" \
