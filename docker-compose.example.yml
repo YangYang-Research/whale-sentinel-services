@@ -109,11 +109,16 @@ services:
       AWS_SECRET_ACCESS_KEY: your-aws-secret-key
       AWS_SECRET_NAME: your-whale-sentinel-secret-name
       WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME: your-whale-sentinel-secret-key-name
+      WS_MODULE_CONFIGURATION_SERVICE_URL: https://whale-sentinel-configuration-service
+      WS_MODULE_CONFIGURATION_SERVICE_ENDPOINT: /api/v1/ws/services/configuration
       WHALE_SENTINEL_VERIFY_TLS: "true"
       LOG_MAX_SIZE: 10000000
       LOG_MAX_BACKUPS: 3
       LOG_MAX_AGE: 30
       LOG_COMPRESS: "true"
+      REDIS_HOST: whale-sentinel-redis-cache
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: your-redis-password
     volumes:
       - /var/log/whale-sentinel/whale-sentinel-common-attack-detection:/var/log/whale-sentinel/whale-sentinel-common-attack-detection
     networks:
