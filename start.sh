@@ -6,4 +6,4 @@ mkdir -p /var/log/whale-sentinel/ws-services/ws-dga-detection
 mkdir -p /var/log/whale-sentinel/ws-services/ws-common-attack-detection
 mkdir -p /var/log/whale-sentinel/ws-services/ws-web-attack-detection
 
-docker compose up -d
+docker-compose up -d
